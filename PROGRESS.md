@@ -4,6 +4,10 @@
 
 This copy now connects src/ui/markdown.rs to both user and assistant messages in both layouts. Markdown and LaTeX equations render normally; code and HTML examples remain literal inside code blocks. Missing referenced UI test files and the formatting fixture were restored under tests/. For this downloaded copy, 14 tests, formatting, Clippy, and the locked build passed. The native pH formatting screenshot was inspected at temp/screenshots/formatting-fixed.png. Earlier verification notes below describe the upstream project history.
 
+## v0.1.1 source packaging repair
+
+Restored the missing tests/ui/markdown.rs, packs.rs, and startup.rs modules. The preview asset now lives in src/ui/previews/formatting.md, so normal compilation does not depend on tests/fixtures/. Include tests/ in source distributions for test and formatter commands. Previous verification records below refer to the upstream project.
+
 ## Current implementation
 
 Native Rust Codex/ChatGPT client using the official Codex app-server. Current launcher: Launch Codex Rust.cmd. Current executable: target/debug/codex-rust.exe.

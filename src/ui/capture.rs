@@ -48,7 +48,7 @@ impl ForgeDesk {
                         ),
                         (
                             forgedesk::domain::Role::Assistant,
-                            include_str!("../../tests/fixtures/formatting.md"),
+                            include_str!("previews/formatting.md"),
                         ),
                     ] {
                         chat.messages.push(forgedesk::domain::Message {
