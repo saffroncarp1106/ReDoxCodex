@@ -14,7 +14,10 @@ pub(super) fn title_drag(context: &egui::Context, response: &egui::Response) {
 
 impl ForgeDesk {
     pub(in crate::app) fn window_interactions(&mut self, context: &egui::Context) {
-        if context.input(|input| input.viewport().maximized.unwrap_or(false)) {
+        // macOS resizes at the native window border; BeginResize is unsupported.
+        if cfg!(target_os = "macos")
+            || context.input(|input| input.viewport().maximized.unwrap_or(false))
+        {
             return;
         }
         let Some(pointer) = context.input(|input| input.pointer.hover_pos()) else {

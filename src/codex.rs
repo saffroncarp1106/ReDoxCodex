@@ -11,13 +11,15 @@ use tokio::sync::{mpsc, oneshot, watch};
 use crate::domain::{Chat, DEFAULT_MODEL, Mode, Role};
 use crate::usage::UsageInfo;
 
+const CLI_NAME: &str = if cfg!(windows) { "codex.exe" } else { "codex" };
+
 const MAX_RECORD_BYTES: usize = 8 * 1024 * 1024;
 const MAX_ANSWER_BYTES: usize = 2 * 1024 * 1024;
 
 pub fn find_executable() -> String {
     if let Some(paths) = std::env::var_os("PATH") {
         for directory in std::env::split_paths(&paths) {
-            let executable = directory.join("codex.exe");
+            let executable = directory.join(CLI_NAME);
 
             if let Some(executable) = cli_executable(&executable) {
                 return executable.to_string_lossy().into_owned();
@@ -25,6 +27,7 @@ pub fn find_executable() -> String {
         }
     }
 
+    #[cfg(windows)]
     if let Some(local_data) = std::env::var_os("LOCALAPPDATA") {
         let binaries = PathBuf::from(local_data).join("OpenAI/Codex/bin");
         if let Ok(entries) = std::fs::read_dir(binaries) {
@@ -43,6 +46,7 @@ pub fn find_executable() -> String {
         }
     }
 
+    #[cfg(windows)]
     if let Some(program_files) = std::env::var_os("ProgramFiles") {
         let packages = PathBuf::from(program_files).join("WindowsApps");
 
@@ -66,12 +70,45 @@ pub fn find_executable() -> String {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    for applications in [
+        Some(PathBuf::from("/Applications")),
+        std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Applications")),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        for app in ["Codex.app", "ChatGPT.app"] {
+            if let Some(executable) = cli_executable(&applications.join(app)) {
+                return executable.to_string_lossy().into_owned();
+            }
+        }
+    }
+
     "codex".into()
 }
 
 pub fn cli_executable(path: &Path) -> Option<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        let contents = if path.extension().is_some_and(|extension| extension == "app") {
+            path.join("Contents")
+        } else {
+            path.parent()?.join("..")
+        };
+        let resources = contents.join("Resources");
+        for relative in ["codex", "codex-cli/CodexCLI.app/Contents/MacOS/codex"] {
+            let executable = resources.join(relative);
+            if executable.is_file() {
+                return std::fs::canonicalize(executable).ok();
+            }
+        }
+        if resources.join("app.asar").is_file() {
+            return None;
+        }
+    }
     if let Some(parent) = path.parent() {
-        let bundled_cli = parent.join("resources/codex.exe");
+        let bundled_cli = parent.join("resources").join(CLI_NAME);
         if bundled_cli.is_file() {
             return std::fs::canonicalize(bundled_cli).ok();
         }
@@ -114,7 +151,7 @@ impl Rpc {
         command.creation_flags(0x08000000);
 
         let mut child = command.spawn().map_err(|error| {
-            format!("Could not start Codex: {error}. Set the codex.exe path in Settings.")
+            format!("Could not start Codex: {error}. Set the Codex CLI path in Settings.")
         })?;
         let input = child.stdin.take().ok_or("Codex stdin unavailable.")?;
         let output = BufReader::new(child.stdout.take().ok_or("Codex stdout unavailable.")?);

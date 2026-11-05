@@ -577,10 +577,10 @@ impl ForgeDesk {
         let sender = self.sender.clone();
         let context = context.clone();
         thread::spawn(move || {
-            let path = rfd::FileDialog::new()
-                .set_title("Select Codex CLI")
-                .add_filter("Executable", &["exe"])
-                .pick_file();
+            let dialog = rfd::FileDialog::new().set_title("Select Codex CLI");
+            #[cfg(windows)]
+            let dialog = dialog.add_filter("Executable", &["exe"]);
+            let path = dialog.pick_file();
             let _ = sender.send(Event::CodexExecutable(path));
             context.request_repaint();
         });
@@ -846,14 +846,15 @@ impl eframe::App for ForgeDesk {
         }
 
         if !self.startup.is_active()
-            && context.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, egui::Key::N))
+            && context.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::N))
         {
             self.session.new_chat();
             self.show_archived = false;
         }
 
         if !self.startup.is_active()
-            && context.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, egui::Key::Comma))
+            && context
+                .input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::Comma))
         {
             self.settings_open = true;
         }

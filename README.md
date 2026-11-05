@@ -4,7 +4,19 @@ A front-end rewrite for rust because 1.2g of ram for a basic ui window is ridicu
 
 ## Run
 
+### Windows
+
 Double-click `Launch Codex Rust.cmd` to build and open this copy. Rust and the Visual Studio C++ build tools are required.
+
+### macOS
+
+Install Rust using rustup and the Xcode command line tools (`xcode-select --install`), then run from the repository:
+
+```sh
+cargo run --locked
+```
+
+The repository selects Rust 1.88.0 automatically through rustup. Codex CLI is required: the app looks for `codex` on `PATH`, then in `Codex.app` or `ChatGPT.app` under `/Applications` and `~/Applications`. You can also select the CLI in Settings > Advanced.
 
 ## Message formatting
 
@@ -25,4 +37,4 @@ cargo build --locked
 
 The formatting preview is now bundled at `src/ui/previews/formatting.md`. Normal app builds no longer depend on a file under `tests/`. The referenced UI regression tests are included in `tests/ui/`; include that folder when distributing source for `cargo test` or `cargo fmt`.
 
-Build with `cargo build --locked`, or double-click `Launch Codex Rust.cmd`. The source archive must include `src/`, `tests/`, `docs/`, `Cargo.toml`, `Cargo.lock`, `rustfmt.toml`, and the launcher. Generated `target/` and `temp/` directories are unnecessary for a source download.
+Build with `cargo build --locked`, or double-click `Launch Codex Rust.cmd`. The source archive must include `src/`, `tests/`, `docs/`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `rustfmt.toml`, and the launcher. Generated `target/` and `temp/` directories are unnecessary for a source download.
