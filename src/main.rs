@@ -22,6 +22,15 @@ fn main() -> eframe::Result {
         .with_resizable(true)
         .with_inner_size(size)
         .with_min_inner_size([900.0, 600.0]);
+    #[cfg(target_os = "macos")]
+    {
+        viewport = viewport
+            .with_decorations(true)
+            .with_fullsize_content_view(true)
+            .with_titlebar_shown(false)
+            .with_title_shown(false)
+            .with_titlebar_buttons_shown(false);
+    }
     if capture_path.is_some() {
         viewport = viewport.with_maximized(false).with_position([80.0, 60.0]);
     }

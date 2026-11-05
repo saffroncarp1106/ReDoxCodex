@@ -37,7 +37,14 @@ impl ForgeDesk {
                             egui::MenuBar::new().ui(ui, |ui| {
                                 ui.spacing_mut().item_spacing.x = 10.0;
                                 ui.menu_button("File", |ui| {
-                                    if ui.button("New chat     Ctrl+N").clicked() {
+                                    if ui
+                                        .button(if cfg!(target_os = "macos") {
+                                            "New chat     ⌘N"
+                                        } else {
+                                            "New chat     Ctrl+N"
+                                        })
+                                        .clicked()
+                                    {
                                         self.new_chat();
                                         ui.close();
                                     }
