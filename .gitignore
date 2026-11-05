@@ -1,0 +1,4 @@
+/target/
+/temp/
+/tools/
+*.log

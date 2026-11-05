@@ -19,3 +19,10 @@ cargo test --locked
 cargo clippy --all-targets -- -D warnings
 cargo build --locked
 ```
+
+
+## v0.1.1 missing-file repair
+
+The formatting preview is now bundled at `src/ui/previews/formatting.md`. Normal app builds no longer depend on a file under `tests/`. The referenced UI regression tests are included in `tests/ui/`; include that folder when distributing source for `cargo test` or `cargo fmt`.
+
+Build with `cargo build --locked`, or double-click `Launch Codex Rust.cmd`. The source archive must include `src/`, `tests/`, `docs/`, `Cargo.toml`, `Cargo.lock`, `rustfmt.toml`, and the launcher. Generated `target/` and `temp/` directories are unnecessary for a source download.
