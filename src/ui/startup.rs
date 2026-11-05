@@ -2,11 +2,14 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Color32, FontId, Pos2, Rect, Sense, Shape, Stroke, Vec2, pos2, vec2};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize)]
+#[path = "startup_settings.rs"]
+mod settings;
+
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(default)]
-pub(super) struct Config {
+pub(in crate::app) struct Config {
     enabled: bool,
     duration_seconds: f32,
     fade_seconds: f32,
@@ -18,6 +21,7 @@ pub(super) struct Config {
     background: String,
     colors: Vec<String>,
     names: Vec<String>,
+    name_choices: Vec<bool>,
     seed: u64,
 }
 
@@ -25,18 +29,17 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             enabled: true,
-            duration_seconds: 4.2,
+            duration_seconds: 5.5,
             fade_seconds: 0.5,
-            cursor_count: 12,
-            cursor_size: 21.0,
+            cursor_count: 4,
+            cursor_size: 15.0,
             show_names: true,
             show_trails: true,
             show_guides: true,
             background: "theme".into(),
-            colors: ["#F24E1E", "#A259FF", "#1ABCFE", "#0ACF83", "#FFC700"]
-                .map(str::to_owned)
-                .into(),
-            names: ["Ada", "Linus", "Grace", "Alan"].map(str::to_owned).into(),
+            colors: ["#8C69B8", "#ABD3D8"].map(str::to_owned).into(),
+            names: ["SaffronCarp1106", "SackBoy19"].map(str::to_owned).into(),
+            name_choices: vec![true, true],
             seed: 42,
         }
     }
@@ -44,21 +47,43 @@ impl Default for Config {
 
 impl Config {
     fn normalize(&mut self) {
-        self.duration_seconds = finite(self.duration_seconds, 4.2).clamp(0.8, 20.0);
+        self.duration_seconds = finite(self.duration_seconds, 5.5).clamp(0.8, 20.0);
         self.fade_seconds = finite(self.fade_seconds, 0.5).clamp(0.1, self.duration_seconds * 0.5);
-        self.cursor_size = finite(self.cursor_size, 21.0).clamp(12.0, 42.0);
+        self.cursor_size = finite(self.cursor_size, 15.0).clamp(12.0, 42.0);
         self.cursor_count = self.cursor_count.clamp(1, 32);
         self.colors.retain(|color| parse_color(color).is_some());
+        self.colors.truncate(32);
         if self.colors.is_empty() {
             self.colors = Self::default().colors;
         }
-        self.names.retain(|name| !name.trim().is_empty());
-        for name in &mut self.names {
-            *name = name.chars().take(24).collect();
+        self.name_choices.resize(self.names.len(), true);
+        let names = std::mem::take(&mut self.names);
+        let choices = std::mem::take(&mut self.name_choices);
+        for (name, selected) in names.into_iter().zip(choices).take(32) {
+            let name: String = name.trim().chars().take(24).collect();
+            if !name.is_empty() {
+                self.names.push(name);
+                self.name_choices.push(selected);
+            }
         }
         if self.names.is_empty() {
             self.names = Self::default().names;
+            self.name_choices = vec![true; self.names.len()];
         }
+        if !self.name_choices.iter().any(|selected| *selected) {
+            self.name_choices[0] = true;
+        }
+    }
+
+    fn selected_names(&self) -> Vec<&str> {
+        self.names
+            .iter()
+            .enumerate()
+            .filter(|(index, name)| {
+                self.name_choices.get(*index).copied().unwrap_or(true) && !name.trim().is_empty()
+            })
+            .map(|(_, name)| name.as_str())
+            .collect()
     }
 
     fn load() -> Self {
@@ -104,8 +129,9 @@ pub(in crate::app) struct Startup {
 }
 
 impl Startup {
-    pub fn new() -> Self {
-        let config = Config::load();
+    pub fn new(preferences: Option<Config>) -> Self {
+        let mut config = preferences.unwrap_or_else(Config::load);
+        config.normalize();
         Self {
             finished: !config.enabled,
             config,
@@ -115,6 +141,12 @@ impl Startup {
 
     pub fn is_active(&self) -> bool {
         !self.finished
+    }
+
+    pub fn preferences(&self) -> Config {
+        let mut config = self.config.clone();
+        config.normalize();
+        config
     }
 
     pub fn draw(&mut self, context: &egui::Context) {
@@ -145,12 +177,18 @@ impl Startup {
         let screen = context.content_rect();
         let body = Rect::from_min_max(pos2(screen.left(), screen.top() + 42.0), screen.max);
         let scene = Scene::capture(context, body, self.config.cursor_count, self.config.seed);
+        let layer = egui::LayerId::new(egui::Order::Foreground, egui::Id::new("startup_swarm"));
+        self.paint(
+            context.layer_painter(layer).with_clip_rect(body),
+            body,
+            elapsed,
+            &scene,
+        );
         egui::Area::new(egui::Id::new("startup_swarm"))
             .order(egui::Order::Foreground)
             .fixed_pos(body.min)
             .show(context, |ui| {
                 let (rect, _) = ui.allocate_exact_size(body.size(), Sense::click_and_drag());
-                self.paint(ui.painter().with_clip_rect(rect), rect, elapsed, &scene);
                 let skip =
                     Rect::from_min_size(rect.right_bottom() - vec2(108.0, 42.0), vec2(94.0, 28.0));
                 if ui.put(skip, egui::Button::new("Skip · Esc")).clicked() {
@@ -190,6 +228,7 @@ impl Startup {
                     .add(shape.shape.clone());
             }
         }
+        let names = config.selected_names();
         for worker in 0..config.cursor_count {
             let jobs: Vec<_> = scene
                 .elements
@@ -280,10 +319,13 @@ impl Startup {
             }
             cursor(&painter, pointer, config.cursor_size, color, 1.0 - exit);
             if config.show_names {
-                let label = &config.names[worker % config.names.len()];
+                let label = names
+                    .get(worker % names.len().max(1))
+                    .copied()
+                    .unwrap_or("Cursor");
                 let label_pos = pointer + vec2(config.cursor_size * 0.75, config.cursor_size * 0.9);
                 let galley = painter.layout_no_wrap(
-                    label.clone(),
+                    label.to_owned(),
                     FontId::proportional(11.0),
                     Color32::WHITE.gamma_multiply(1.0 - exit),
                 );

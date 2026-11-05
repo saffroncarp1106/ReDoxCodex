@@ -58,6 +58,17 @@ pub fn semibold(size: f32) -> egui::FontId {
     egui::FontId::new(size, egui::FontFamily::Name("semibold".into()))
 }
 
+pub fn conversation_scroll() -> egui::style::ScrollStyle {
+    egui::style::ScrollStyle {
+        bar_width: 12.0,
+        handle_min_length: 36.0,
+        bar_inner_margin: 6.0,
+        bar_outer_margin: 12.0,
+        foreground_color: true,
+        ..egui::style::ScrollStyle::solid()
+    }
+}
+
 pub fn apply(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
     let font_directory = std::env::var_os("SystemRoot")

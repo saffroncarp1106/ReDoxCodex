@@ -1,34 +1,21 @@
 {
   "enabled": true,
-  "duration_seconds": 4.2,
+  "duration_seconds": 5.5,
   "fade_seconds": 0.5,
-  "cursor_count": 12,
-  "cursor_size": 21.0,
+  "cursor_count": 4,
+  "cursor_size": 15.0,
   "show_names": true,
   "show_trails": true,
   "show_guides": true,
   "background": "theme",
   "colors": [
-    "#F24E1E",
-    "#A259FF",
-    "#1ABCFE",
-    "#0ACF83",
-    "#FF7262",
-    "#FFC700"
+    "#8C69B8",
+    "#ABD3D8"
   ],
   "names": [
-    "Ada",
-    "Linus",
-    "Grace",
-    "Alan",
-    "Margaret",
-    "Ken",
-    "Barbara",
-    "Dennis",
-    "Radia",
-    "Guido",
-    "Frances",
-    "Bjarne"
+    "SaffronCarp1106",
+    "SackBoy19"
   ],
+  "name_choices": [true, true],
   "seed": 42
 }

@@ -30,10 +30,10 @@ impl ForgeDesk {
         let enabled = self.running.is_none()
             && !self.importing_ui
             && self.capture_path.is_none()
-            && !self
+            && self
                 .login_task
                 .as_ref()
-                .is_some_and(|task| !task.is_finished());
+                .is_none_or(|task| task.is_finished());
         ui.add_enabled_ui(enabled,|ui| {
             egui::ComboBox::from_id_salt(id).width(112.0).selected_text(format!("UI · {}",self.active_ui.config.name))
                 .show_ui(ui,|ui| {

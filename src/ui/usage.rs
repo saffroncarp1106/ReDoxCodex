@@ -35,8 +35,8 @@ impl ForgeDesk {
                                 ui.label(window.label());
                                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| { ui.label(format!("{:.0}% remaining", window.remaining_percent())); });
                             });
-                            ui.add(egui::ProgressBar::new((window.used_percent / 100.0).clamp(0.0,1.0) as f32)
-                                .fill(theme::blue()).text(format!("{:.0}% used", window.used_percent)));
+                            ui.add(egui::ProgressBar::new((window.remaining_percent() / 100.0) as f32)
+                                .fill(theme::blue()).text(format!("{:.0}% remaining", window.remaining_percent())));
                             let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |time| time.as_secs() as i64);
                             ui.label(RichText::new(window.reset_label(now)).small().color(muted()));
                         }

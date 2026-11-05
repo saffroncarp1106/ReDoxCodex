@@ -188,7 +188,7 @@ impl ForgeDesk {
             ui_scanned: Instant::now(),
             ui_background,
             restart_request,
-            startup: ui::startup::Startup::new(),
+            startup: ui::startup::Startup::new(ui_preferences.startup.clone()),
             history: Vec::new(),
             history_cursor: None,
             history_loading: false,
@@ -870,6 +870,7 @@ impl eframe::App for ForgeDesk {
         }
         eframe::set_value(storage, STORAGE_KEY, &self.session);
         self.ui_preferences.sidebar_visible = self.sidebar_visible;
+        self.ui_preferences.startup = Some(self.startup.preferences());
         self.ui_preferences
             .sidebars
             .insert(self.active_ui.id.clone(), self.sidebar_visible);

@@ -64,6 +64,35 @@ impl ForgeDesk {
                 }
             }
 
+            if let Some(path) = std::env::args().find_map(|arg| {
+                arg.strip_prefix("--media-preview=")
+                    .map(std::path::PathBuf::from)
+            }) {
+                match std::fs::read_to_string(&path) {
+                    Ok(content) => {
+                        self.session.new_chat();
+                        if let Some(chat) = self.session.active_mut() {
+                            chat.title = "Media preview".into();
+                            chat.workspace = path
+                                .canonicalize()
+                                .ok()
+                                .and_then(|path| path.parent().map(std::path::Path::to_path_buf));
+                            chat.messages.push(forgedesk::domain::Message {
+                                id: uuid::Uuid::new_v4(),
+                                role: forgedesk::domain::Role::Assistant,
+                                content,
+                                status: forgedesk::domain::MessageStatus::Complete,
+                                error: None,
+                                model: "Local media preview".into(),
+                                attachments: Vec::new(),
+                            });
+                        }
+                    }
+                    Err(error) => {
+                        eprintln!("Could not read media preview {}: {error}", path.display())
+                    }
+                }
+            }
             if std::env::args().any(|arg| arg == "--home-preview") {
                 self.session.new_chat();
             }
@@ -79,6 +108,7 @@ impl ForgeDesk {
                     "models" => super::SettingsPage::Models,
                     "workspace" => super::SettingsPage::Workspace,
                     "appearance" => super::SettingsPage::Appearance,
+                    "cursors" => super::SettingsPage::Cursors,
                     "advanced" => super::SettingsPage::Advanced,
                     _ => super::SettingsPage::Account,
                 };

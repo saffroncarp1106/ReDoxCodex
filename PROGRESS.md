@@ -1,5 +1,13 @@
 # Progress
 
+## Native UI and media updates — November 5, 2026
+
+Startup covers the conversation from the first frame and recovers unusably small saved window sizes. Both layouts have wider inset conversation scrollbars and shorter prompt boxes. Cursor animation settings support editable and selected names, palette presets, custom colors, replay, and persisted preferences, with source credits to Dhvanil Patel and Joel Califa. Current chosen cursor settings are bundled as release defaults. Usage bars now fill with the remaining allowance.
+
+Images and animated GIFs render inline in both layouts, including generated-image events, attachments, and local, relative, embedded, and HTTP(S) references. Video links open the system player/browser. Generated image storage uses each platform's application-data directory. Windows Markdown path escaping is repaired for existing saved conversations as well as new outputs. Native screenshots verified both layouts and the actual previously failing generated image without another model request. Test animations and video fixtures were limited to one second.
+
+Upstream macOS CLI discovery, shortcuts, window configuration, file picker behavior, tests, and pinned Rust toolchain are preserved. macOS runtime behavior still requires verification on a Mac.
+
 ## Downloaded-copy formatting repair
 
 This copy now connects src/ui/markdown.rs to both user and assistant messages in both layouts. Markdown and LaTeX equations render normally; code and HTML examples remain literal inside code blocks. Missing referenced UI test files and the formatting fixture were restored under tests/. For this downloaded copy, 14 tests, formatting, Clippy, and the locked build passed. The native pH formatting screenshot was inspected at temp/screenshots/formatting-fixed.png. Earlier verification notes below describe the upstream project history.

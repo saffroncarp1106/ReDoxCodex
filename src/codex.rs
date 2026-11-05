@@ -640,6 +640,13 @@ pub async fn stream_chat(
             }
             "item/completed" => {
                 let item = &params["item"];
+                if let Some(content) = crate::media::generated_image(item) {
+                    let id = item["id"].as_str().unwrap_or_default();
+                    if !messages.contains_key(id) {
+                        send(&sender, ProviderEvent::Content(content.clone())).await?;
+                        messages.insert(id.into(), content);
+                    }
+                }
                 if item["type"] == "agentMessage" {
                     let id = item["id"].as_str().unwrap_or_default();
                     let text = item["text"].as_str().unwrap_or_default();

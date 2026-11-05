@@ -121,11 +121,13 @@ pub fn parse_turns(page: &Value, model: &str) -> Result<Vec<Message>, String> {
                                 .iter()
                                 .filter_map(|part| match part["type"].as_str() {
                                     Some("text") => part["text"].as_str().map(str::to_owned),
-                                    Some("localImage") => Some(format!(
-                                        "[Image: {}]",
-                                        part["path"].as_str().unwrap_or("attachment")
-                                    )),
-                                    Some("image") => Some("[Image attachment]".into()),
+                                    Some("localImage") => {
+                                        part["path"].as_str().map(crate::media::image_markdown)
+                                    }
+                                    Some("image") => part["url"]
+                                        .as_str()
+                                        .map(crate::media::image_markdown)
+                                        .or_else(|| Some("[Image attachment unavailable]".into())),
                                     _ => None,
                                 })
                                 .collect::<Vec<_>>()
@@ -136,6 +138,10 @@ pub fn parse_turns(page: &Value, model: &str) -> Result<Vec<Message>, String> {
                 Some("agentMessage") => (
                     Role::Assistant,
                     item["text"].as_str().unwrap_or_default().to_owned(),
+                ),
+                Some("imageGeneration") => (
+                    Role::Assistant,
+                    crate::media::generated_image(item).unwrap_or_default(),
                 ),
                 _ => continue,
             };

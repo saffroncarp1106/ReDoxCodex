@@ -35,6 +35,7 @@ fn main() -> eframe::Result {
         viewport = viewport.with_maximized(false).with_position([80.0, 60.0]);
     }
     let options = eframe::NativeOptions {
+        window_builder: Some(Box::new(ForgeDesk::validate_window_size)),
         persist_window: capture_path.is_none(),
         persistence_path: if cfg!(debug_assertions) {
             std::env::var_os("CODEX_RUST_VERIFY_UI_RESTART")

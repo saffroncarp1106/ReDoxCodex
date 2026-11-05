@@ -10,6 +10,7 @@ The entire presentation layer is in `src/ui/`. Codex transport, authentication, 
 | `gemini.rs` | Gemini-style home, rail, composer, and conversation layout |
 | `shell.rs` | Window chrome, navigation rail, projects, local chats, shared Codex history and pagination controls |
 | `conversation.rs` | Conversation layout, messages, Markdown/code blocks, composer, attachment chips |
+| `markdown.rs`, `media.rs` | Shared Markdown/math, inline images and animated GIFs, video playback links |
 | `controls.rs` | Model and effort display helpers and effort control |
 | `settings.rs` | Account, model/reasoning, workspace/access, appearance, and advanced settings |
 | `usage.rs` | Usage popup anchored to the bottom-left reticle |
@@ -17,6 +18,7 @@ The entire presentation layer is in `src/ui/`. Codex transport, authentication, 
 | `icons.rs` | Vector icon artwork and icon buttons |
 | `theme.rs` | Color tokens, typography, default spacing, and widget styling |
 | `startup.rs`, `startup.json` | Native cursor swarm startup choreography and editable configuration |
+| `startup_settings.rs` | Cursor name selection, palette presets, color editing, replay, and source credits |
 | `capture.rs` | Native screenshot verification utility |
 | `window_frame.rs` | Native title-bar dragging, maximize/restore, edge and corner resizing |
 
@@ -40,6 +42,10 @@ These are native Rust UI modules. Source changes require rebuilding. Authenticat
 
 Interface scale and sidebar visibility are stored separately from conversation data under `codex-rust.ui.v1`. Account credentials are managed by Codex and are not stored in UI preferences. New appearance preferences belong in `Preferences` in `mod.rs`.
 
+**Settings → Cursor animation** manages the startup animation in either layout. Add, edit, remove, and select names; choose Classic, Pastel, Ocean, or Sunset palettes; or edit swatches and add colors for a custom palette. Selected names and colors cycle across the configured cursors. At least one nonblank name and valid color are retained. Replay applies changes immediately; startup playback can be disabled separately.
+
+Animation overrides are saved in the `startup` field of `codex-rust.ui.v1`. Before overrides exist, `startup.json` (or `CODEX_RUST_STARTUP_CONFIG`) supplies the initial configuration. Restore animation defaults loads the bundled defaults. Credits link to [Dhvanil Patel's Swarm Rebuild](https://github.com/DhvanilPatel/swarm-cursors) and [Joel Califa's original Swarm](https://califa.github.io/swarm-site/).
+
 ## Verify a layout
 
 Build first, then capture the app's own renderer:
@@ -62,6 +68,8 @@ To capture the startup choreography at a fixed time (in seconds), use:
 ```
 
 Without the preview flag, screenshot mode waits for the startup animation to finish. Do not use the preview flag for normal launches: it freezes the animation for visual verification.
+
+To verify media without a model call, create local image/GIF/video fixtures and a Markdown file linking them, then run `target/debug/codex-rust.exe --screenshot temp/screenshots/media.png --media-preview=temp/media-fixtures/preview.md`. Paths in that Markdown resolve relative to the preview file. Add `--ui=gemini` to check the other layout. This preview is only applied in screenshot mode and does not save the temporary chat.
 
 Create `temp/screenshots/` before capturing. Screenshot mode uses the current local account and conversation data, waits for connection discovery and history loading, saves one frame, and closes. Keep captures in `temp/` and review their content before sharing.
 

@@ -98,6 +98,7 @@ impl ForgeDesk {
                     return;
                 }
 
+                ui.spacing_mut().scroll = theme::conversation_scroll();
                 egui::ScrollArea::vertical()
                     .id_salt(chat.id)
                     .stick_to_bottom(true)
@@ -111,7 +112,7 @@ impl ForgeDesk {
                                 ui.set_width(content_width);
                                 ui.add_space(10.0);
                                 for message in &chat.messages {
-                                    render_message(ui, message);
+                                    render_message(ui, message, chat.workspace.as_deref());
                                     ui.add_space(26.0);
                                 }
                                 ui.add_space(16.0);
@@ -137,7 +138,7 @@ impl ForgeDesk {
                     .fill(surface())
                     .stroke(Stroke::new(1.0_f32, Color32::from_gray(59)))
                     .corner_radius(20)
-                    .inner_margin(Margin::symmetric(12, 11))
+                    .inner_margin(Margin::symmetric(12, 6))
                     .show(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = 2.0;
                         ui.set_min_width(ui.available_width());
@@ -187,7 +188,7 @@ impl ForgeDesk {
                                         .font(FontId::proportional(14.0))
                                         .hint_text(&self.active_ui.config.placeholder)
                                         .desired_width(f32::INFINITY)
-                                        .desired_rows(2)
+                                        .desired_rows(1)
                                         .return_key(egui::KeyboardShortcut::new(
                                             egui::Modifiers::SHIFT,
                                             egui::Key::Enter,
@@ -357,7 +358,11 @@ impl ForgeDesk {
     }
 }
 
-pub(super) fn render_message(ui: &mut egui::Ui, message: &Message) {
+pub(super) fn render_message(
+    ui: &mut egui::Ui,
+    message: &Message,
+    workspace: Option<&std::path::Path>,
+) {
     if message.role == Role::User {
         ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
             Frame::new()
@@ -367,13 +372,18 @@ pub(super) fn render_message(ui: &mut egui::Ui, message: &Message) {
                 .show(ui, |ui| {
                     ui.set_max_width((ui.available_width() * 0.72).max(180.0));
                     for file in &message.attachments {
+                        if file.text.is_none() {
+                            super::media::show(ui, &file.path.to_string_lossy(), false, workspace);
+                        }
                         ui.label(
                             RichText::new(format!("▧ {}", file.name()))
                                 .size(12.0)
                                 .color(Color32::from_gray(215)),
                         );
                     }
-                    ui.push_id(message.id, |ui| super::markdown::show(ui, &message.content));
+                    ui.push_id(message.id, |ui| {
+                        super::markdown::show_in_workspace(ui, &message.content, workspace)
+                    });
                 });
         });
         return;
@@ -385,7 +395,9 @@ pub(super) fn render_message(ui: &mut egui::Ui, message: &Message) {
             ui.label(RichText::new("Working...").color(muted()));
         });
     } else {
-        ui.push_id(message.id, |ui| super::markdown::show(ui, &message.content));
+        ui.push_id(message.id, |ui| {
+            super::markdown::show_in_workspace(ui, &message.content, workspace)
+        });
     }
 
     if let Some(error) = &message.error {

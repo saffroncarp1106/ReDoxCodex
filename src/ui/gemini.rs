@@ -132,6 +132,7 @@ impl ForgeDesk {
                     });
                     self.gemini_centered_composer(ui, context);
                 } else {
+                    ui.spacing_mut().scroll = theme::conversation_scroll();
                     egui::ScrollArea::vertical()
                         .id_salt(("gemini_chat", self.session.active_chat))
                         .stick_to_bottom(true)
@@ -146,7 +147,11 @@ impl ForgeDesk {
                                     ui.add_space(20.0);
                                     if let Some(chat) = self.session.active() {
                                         for message in &chat.messages {
-                                            super::conversation::render_message(ui, message);
+                                            super::conversation::render_message(
+                                                ui,
+                                                message,
+                                                chat.workspace.as_deref(),
+                                            );
                                             ui.add_space(26.0);
                                         }
                                     }
@@ -187,7 +192,7 @@ impl ForgeDesk {
         Frame::new()
             .fill(theme::surface())
             .corner_radius(36)
-            .inner_margin(Margin::symmetric(16, 14))
+            .inner_margin(Margin::symmetric(16, 6))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.menu_button(RichText::new("+").size(27.0), |ui| {

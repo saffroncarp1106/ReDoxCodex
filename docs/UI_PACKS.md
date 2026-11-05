@@ -42,7 +42,7 @@ Optional: add `"background_image": "background.png"` and include that file besid
 
 `layout` accepts `codex` or `gemini`. Other fields are optional and inherit defaults. Colors use six-digit RGB hex strings. `glow_strength` ranges from 0 to 1. Labels are bounded, and configs must be at most 64 KiB. Unknown fields and invalid values produce an explicit error. Copy the complete built-in Gemini config when you want its exact palette as your starting point.
 
-`sidebar_default` is used on first selection. Later choices are remembered separately for each pack. UI selection, chats, drafts, workspace, and model/effort choices survive restart. A missing selected pack falls back to Codex. The cursor animation reads actual rendered geometry from either layout; its independent controls remain in `src/ui/startup.json`.
+`sidebar_default` is used on first selection. Later choices are remembered separately for each pack. UI selection, chats, drafts, workspace, and model/effort choices survive restart. A missing selected pack falls back to Codex. The cursor animation reads actual rendered geometry from either layout. Customize it in Settings → Cursor animation; saved choices apply to both layouts. `src/ui/startup.json` supplies the initial defaults before personal overrides are saved.
 
 Choose UI → Reload current UI after editing the active config. Selecting or reloading a pack saves the session and restarts the process. Switching is disabled while a response, sign-in, or import is running.
 

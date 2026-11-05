@@ -11,6 +11,7 @@ use forgedesk::domain::{DEFAULT_MODEL, Mode};
 impl ForgeDesk {
     pub(in crate::app) fn settings(&mut self, context: &egui::Context) {
         let mut open = self.settings_open;
+        let animation_was_active = self.startup.is_active();
         let available = context.content_rect().size();
         let size = vec2(
             (available.x - 40.0).clamp(480.0, 740.0),
@@ -30,6 +31,7 @@ impl ForgeDesk {
                     (SettingsPage::Models, "Models & reasoning"),
                     (SettingsPage::Workspace, "Workspace & access"),
                     (SettingsPage::Appearance, "Appearance"),
+                    (SettingsPage::Cursors, "Cursor animation"),
                     (SettingsPage::Advanced, "Advanced"),
                 ];
                 if ui.available_width() < 620.0 {
@@ -73,10 +75,11 @@ impl ForgeDesk {
                     });
                 }
             });
-        self.settings_open = open;
+        self.settings_open = open && (animation_was_active || !self.startup.is_active());
     }
 
     fn settings_content(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
+        ui.spacing_mut().scroll = theme::conversation_scroll();
         egui::ScrollArea::vertical()
             .id_salt("settings_content")
             .max_height((ui.available_height() - 16.0).max(220.0))
@@ -90,6 +93,16 @@ impl ForgeDesk {
                         SettingsPage::Models => self.model_settings(ui),
                         SettingsPage::Workspace => self.workspace_settings(ui, context),
                         SettingsPage::Appearance => self.appearance_settings(ui, context),
+                        SettingsPage::Cursors => {
+                            heading(
+                                ui,
+                                "Cursor animation",
+                                "Choose the names and colors in your startup animation.",
+                            );
+                            if self.startup.settings(ui) {
+                                self.settings_open = false;
+                            }
+                        }
                         SettingsPage::Advanced => self.advanced_settings(ui, context),
                     }
                 });

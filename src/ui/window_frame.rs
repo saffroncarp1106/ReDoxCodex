@@ -13,11 +13,20 @@ pub(super) fn title_drag(context: &egui::Context, response: &egui::Response) {
 }
 
 impl ForgeDesk {
-    pub(in crate::app) fn window_interactions(&mut self, context: &egui::Context) {
-        // macOS resizes at the native window border; BeginResize is unsupported.
-        if cfg!(target_os = "macos")
-            || context.input(|input| input.viewport().maximized.unwrap_or(false))
+    pub(crate) fn validate_window_size(
+        mut viewport: egui::ViewportBuilder,
+    ) -> egui::ViewportBuilder {
+        if viewport
+            .inner_size
+            .is_some_and(|size| !size.is_finite() || size.x < 900.0 || size.y < 600.0)
         {
+            viewport.inner_size = Some(egui::vec2(1100.0, 900.0));
+        }
+        viewport
+    }
+
+    pub(in crate::app) fn window_interactions(&mut self, context: &egui::Context) {
+        if context.input(|input| input.viewport().maximized.unwrap_or(false)) {
             return;
         }
         let Some(pointer) = context.input(|input| input.pointer.hover_pos()) else {
@@ -31,6 +40,10 @@ impl ForgeDesk {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/ui/window_frame.rs"]
+mod restore_tests;
 
 fn resize_hit(rect: Rect, pointer: Pos2) -> Option<(ResizeDirection, CursorIcon)> {
     if !rect.contains(pointer) {

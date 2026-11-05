@@ -10,6 +10,7 @@ mod dialogs;
 mod gemini;
 mod icons;
 mod markdown;
+mod media;
 pub(super) mod packs;
 mod picker;
 mod settings;
@@ -28,6 +29,7 @@ pub(super) struct Preferences {
     pub sidebars: std::collections::BTreeMap<String, bool>,
     pub zoom: f32,
     pub sidebar_visible: bool,
+    pub startup: Option<startup::Config>,
 }
 
 impl Default for Preferences {
@@ -37,6 +39,7 @@ impl Default for Preferences {
             sidebars: std::collections::BTreeMap::new(),
             zoom: 1.0,
             sidebar_visible: true,
+            startup: None,
         }
     }
 }
@@ -58,6 +61,7 @@ pub(super) enum SettingsPage {
     Models,
     Workspace,
     Appearance,
+    Cursors,
     Advanced,
 }
 

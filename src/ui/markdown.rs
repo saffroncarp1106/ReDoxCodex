@@ -13,13 +13,31 @@ thread_local! {
     static MATH: RefCell<MathCache> = RefCell::new(MathCache::default());
 }
 
+#[cfg(test)]
 pub(super) fn show(ui: &mut egui::Ui, source: &str) {
+    show_in_workspace(ui, source, None);
+}
+
+pub(super) fn show_in_workspace(
+    ui: &mut egui::Ui,
+    source: &str,
+    workspace: Option<&std::path::Path>,
+) {
     let source = normalize_delimiters(source);
+    let mut offset = 0;
+    for reference in super::media::references(&source) {
+        render(ui, &source[offset..reference.range.start]);
+        super::media::show(ui, &reference.destination, reference.video, workspace);
+        offset = reference.range.end;
+    }
+    render(ui, &source[offset..]);
+}
+
+fn render(ui: &mut egui::Ui, source: &str) {
     MARKDOWN.with(|cache| {
         CommonMarkViewer::new()
             .render_math_fn(Some(&render_math))
-            .explicit_image_uri_scheme(true)
-            .show(ui, &mut cache.borrow_mut(), &source);
+            .show(ui, &mut cache.borrow_mut(), source);
     });
 }
 
