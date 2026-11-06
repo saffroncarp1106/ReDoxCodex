@@ -20,7 +20,9 @@ pub struct Colors {
     pub sidebar: Option<String>,
     pub rail: Option<String>,
     pub surface: Option<String>,
+    pub input_background: Option<String>,
     pub text: Option<String>,
+    pub menu_text: Option<String>,
     pub muted: Option<String>,
     pub border: Option<String>,
     pub accent: Option<String>,
@@ -34,6 +36,7 @@ pub struct Config {
     pub heading: String,
     pub placeholder: String,
     pub palette: Colors,
+    pub palette_guide: std::collections::BTreeMap<String, String>,
     pub glow: String,
     pub glow_strength: f32,
     pub sidebar_default: bool,
@@ -48,6 +51,7 @@ impl Default for Config {
             heading: "What can I help with?".into(),
             placeholder: "Ask anything".into(),
             palette: Colors::default(),
+            palette_guide: std::collections::BTreeMap::new(),
             glow: "#223C9D".into(),
             glow_strength: 0.6,
             sidebar_default: true,
@@ -148,6 +152,7 @@ impl Config {
             (&self.palette.rail, &mut palette.rail),
             (&self.palette.surface, &mut palette.surface),
             (&self.palette.text, &mut palette.text),
+            (&self.palette.menu_text, &mut palette.menu_text),
             (&self.palette.muted, &mut palette.muted),
             (&self.palette.border, &mut palette.border),
             (&self.palette.accent, &mut palette.blue),
@@ -156,6 +161,13 @@ impl Config {
                 *target = color(value)?;
             }
         }
+        palette.input_background = self
+            .palette
+            .input_background
+            .as_deref()
+            .map(color)
+            .transpose()?
+            .unwrap_or(palette.surface);
         Ok(palette)
     }
 }

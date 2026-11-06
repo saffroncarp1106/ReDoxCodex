@@ -36,73 +36,91 @@ impl ForgeDesk {
                         |ui| {
                             egui::MenuBar::new().ui(ui, |ui| {
                                 ui.spacing_mut().item_spacing.x = 10.0;
-                                ui.menu_button("File", |ui| {
-                                    if ui
-                                        .button(if cfg!(target_os = "macos") {
-                                            "New chat     ⌘N"
-                                        } else {
-                                            "New chat     Ctrl+N"
-                                        })
-                                        .clicked()
-                                    {
-                                        self.new_chat();
-                                        ui.close();
-                                    }
-                                    if ui.button("Open project").clicked() {
-                                        self.pick_workspace(context);
-                                        ui.close();
-                                    }
-                                    if ui.button("Add files").clicked() {
-                                        self.pick_files(context);
-                                        ui.close();
-                                    }
-                                    if ui.button("Settings").clicked() {
-                                        self.settings_open = true;
-                                        ui.close();
-                                    }
-                                    ui.separator();
-                                    if ui.button("Exit").clicked() {
-                                        context.send_viewport_cmd(egui::ViewportCommand::Close);
-                                    }
-                                });
-                                ui.menu_button("Edit", |ui| {
-                                    if ui.button("Rename chat").clicked() {
-                                        self.rename_open = true;
-                                        ui.close();
-                                    }
-                                    if ui.button("Copy conversation").clicked() {
-                                        if let Some(chat) = self.session.active() {
-                                            let text = chat
-                                                .messages
-                                                .iter()
-                                                .map(|message| message.content.as_str())
-                                                .collect::<Vec<_>>()
-                                                .join("\n\n");
-                                            context.copy_text(text);
+                                ui.menu_button(
+                                    RichText::new("File").color(theme::menu_text()),
+                                    |ui| {
+                                        if ui
+                                            .add_enabled(
+                                                self.can_new_chat(),
+                                                egui::Button::new(if cfg!(target_os = "macos") {
+                                                    "New chat     ⌘N"
+                                                } else {
+                                                    "New chat     Ctrl+N"
+                                                }),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.new_chat();
+                                            ui.close();
                                         }
-                                        ui.close();
-                                    }
-                                });
-                                ui.menu_button("View", |ui| {
-                                    ui.checkbox(&mut self.sidebar_visible, "Sidebar");
-                                    ui.checkbox(&mut self.show_archived, "Archived chats");
-                                    if ui.button("Search chats").clicked() {
-                                        self.search_open = true;
-                                        self.sidebar_visible = true;
-                                        ui.close();
-                                    }
-                                });
-                                ui.menu_button("Help", |ui| {
-                                    ui.label("Codex Rust · Native Rust client");
-                                    ui.hyperlink_to(
-                                        "Codex app-server documentation",
-                                        "https://learn.chatgpt.com/docs/app-server",
-                                    );
-                                });
+                                        if ui.button("Open project").clicked() {
+                                            self.pick_workspace(context);
+                                            ui.close();
+                                        }
+                                        if ui.button("Add files").clicked() {
+                                            self.pick_files(context);
+                                            ui.close();
+                                        }
+                                        if ui.button("Settings").clicked() {
+                                            self.settings_open = true;
+                                            ui.close();
+                                        }
+                                        ui.separator();
+                                        if ui.button("Exit").clicked() {
+                                            context.send_viewport_cmd(egui::ViewportCommand::Close);
+                                        }
+                                    },
+                                );
+                                ui.menu_button(
+                                    RichText::new("Edit").color(theme::menu_text()),
+                                    |ui| {
+                                        if ui.button("Rename chat").clicked() {
+                                            self.rename_open = true;
+                                            ui.close();
+                                        }
+                                        if ui.button("Copy conversation").clicked() {
+                                            if let Some(chat) = self.session.active() {
+                                                let text = chat
+                                                    .messages
+                                                    .iter()
+                                                    .map(|message| message.content.as_str())
+                                                    .collect::<Vec<_>>()
+                                                    .join("\n\n");
+                                                context.copy_text(text);
+                                            }
+                                            ui.close();
+                                        }
+                                    },
+                                );
+                                ui.menu_button(
+                                    RichText::new("View").color(theme::menu_text()),
+                                    |ui| {
+                                        ui.checkbox(&mut self.sidebar_visible, "Sidebar");
+                                        ui.checkbox(&mut self.show_archived, "Archived chats");
+                                        if ui.button("Search chats").clicked() {
+                                            self.search_open = true;
+                                            self.sidebar_visible = true;
+                                            ui.close();
+                                        }
+                                    },
+                                );
+                                ui.menu_button(
+                                    RichText::new("Help").color(theme::menu_text()),
+                                    |ui| {
+                                        ui.label("Codex Rust · Native Rust client");
+                                        ui.hyperlink_to(
+                                            "Codex app-server documentation",
+                                            "https://learn.chatgpt.com/docs/app-server",
+                                        );
+                                    },
+                                );
                             });
                         },
                     );
-                    self.ui_picker(ui, "title_ui_picker");
+                    ui.scope(|ui| {
+                        ui.visuals_mut().override_text_color = Some(theme::menu_text());
+                        self.ui_picker(ui, "title_ui_picker");
+                    });
                     let drag_width = (ui.available_width() - 108.0).max(0.0);
                     let (_, drag) =
                         ui.allocate_exact_size(vec2(drag_width, 30.0), Sense::click_and_drag());
@@ -144,11 +162,6 @@ impl ForgeDesk {
         }
     }
 
-    fn new_chat(&mut self) {
-        self.session.new_chat();
-        self.show_archived = false;
-    }
-
     pub(in crate::app) fn navigation_rail(&mut self, context: &egui::Context) {
         egui::SidePanel::left("navigation_rail")
             .exact_width(48.0)
@@ -165,7 +178,13 @@ impl ForgeDesk {
                     self.show_archived = false;
                     self.sidebar_visible = true;
                 }
-                if rail_button(ui, Icon::Chat, false, "New chat").clicked() {
+                if ui
+                    .add_enabled_ui(self.can_new_chat(), |ui| {
+                        rail_button(ui, Icon::Chat, false, "New chat")
+                    })
+                    .inner
+                    .clicked()
+                {
                     self.new_chat();
                 }
                 if rail_button(ui, Icon::Clock, self.show_archived, "Archived chats").clicked() {
@@ -175,7 +194,13 @@ impl ForgeDesk {
                 if rail_button(ui, Icon::Books, false, "Open project").clicked() {
                     self.pick_workspace(context);
                 }
-                if rail_button(ui, Icon::NewChat, false, "New coding chat").clicked() {
+                if ui
+                    .add_enabled_ui(self.can_new_chat(), |ui| {
+                        rail_button(ui, Icon::NewChat, false, "New coding chat")
+                    })
+                    .inner
+                    .clicked()
+                {
                     self.new_chat();
                     if let Some(chat) = self.session.active_mut() {
                         chat.mode = Mode::Code;
@@ -260,7 +285,13 @@ impl ForgeDesk {
                     });
                 });
                 ui.add_space(8.0);
-                if sidebar_row(ui, "New chat", false, 8.0, Some(Icon::NewChat)).clicked() {
+                if ui
+                    .add_enabled_ui(self.can_new_chat(), |ui| {
+                        sidebar_row(ui, "New chat", false, 8.0, Some(Icon::NewChat))
+                    })
+                    .inner
+                    .clicked()
+                {
                     self.new_chat();
                 }
 
@@ -387,15 +418,31 @@ impl ForgeDesk {
 
     fn chat_rows(&mut self, ui: &mut egui::Ui, chats: &[(Uuid, String)], indent: f32) {
         for (id, title) in chats {
-            let response = sidebar_row(
+            let running = self
+                .session
+                .chats
+                .iter()
+                .find(|chat| chat.id == *id)
+                .is_some_and(|chat| {
+                    chat.messages.iter().any(|message| {
+                        message.status == forgedesk::domain::MessageStatus::Streaming
+                    })
+                });
+            let (response, archive) = chat_row(
                 ui,
                 title,
                 self.session.active_chat == Some(*id),
                 indent,
-                None,
+                self.show_archived,
+                !running,
             );
+            if archive.clicked() {
+                self.archive_local_chat(*id, !self.show_archived);
+                continue;
+            }
             if response.clicked() {
                 self.session.active_chat = Some(*id);
+                self.focus_prompt = self.session.active().is_some_and(|chat| chat.is_blank());
                 if let Some(thread) = self
                     .session
                     .active()
@@ -416,9 +463,7 @@ impl ForgeDesk {
                     "Archive locally"
                 };
                 if ui.button(label).clicked() {
-                    if let Some(chat) = self.session.chats.iter_mut().find(|chat| chat.id == *id) {
-                        chat.archived = !chat.archived;
-                    }
+                    self.archive_local_chat(*id, !self.show_archived);
                     ui.close();
                 }
             });
@@ -455,6 +500,12 @@ impl ForgeDesk {
         let entries: Vec<_> = self
             .history
             .iter()
+            .filter(|entry| {
+                self.session
+                    .local_archive_overrides
+                    .get(&entry.id)
+                    .is_none_or(|archived| *archived == self.show_archived)
+            })
             .map(|entry| {
                 (
                     entry.id.clone(),
@@ -478,9 +529,29 @@ impl ForgeDesk {
                     } else {
                         &title
                     };
-                    let response =
-                        sidebar_row(ui, title, selected.as_ref() == Some(&id), 8.0, None)
-                            .on_hover_text(cwd);
+                    let running = self
+                        .session
+                        .chats
+                        .iter()
+                        .filter(|chat| chat.thread_id.as_deref() == Some(id.as_str()))
+                        .any(|chat| {
+                            chat.messages.iter().any(|message| {
+                                message.status == forgedesk::domain::MessageStatus::Streaming
+                            })
+                        });
+                    let (response, archive) = chat_row(
+                        ui,
+                        title,
+                        selected.as_ref() == Some(&id),
+                        8.0,
+                        false,
+                        !running && !self.show_archived,
+                    );
+                    let response = response.on_hover_text(cwd);
+                    if archive.clicked() {
+                        self.archive_history_locally(&id);
+                        continue;
+                    }
                     if response.clicked() {
                         self.open_history(context, id, false);
                     }
@@ -536,6 +607,40 @@ fn rail_button(ui: &mut egui::Ui, icon: Icon, selected: bool, tooltip: &str) -> 
     response.on_hover_text(tooltip)
 }
 
+fn chat_row(
+    ui: &mut egui::Ui,
+    title: &str,
+    selected: bool,
+    indent: f32,
+    archived: bool,
+    enabled: bool,
+) -> (egui::Response, egui::Response) {
+    ui.horizontal(|ui| {
+        let width = (ui.available_width() - 30.0 - ui.spacing().item_spacing.x).max(20.0);
+        let row = ui
+            .allocate_ui_with_layout(
+                vec2(width, 30.0),
+                Layout::left_to_right(Align::Center),
+                |ui| sidebar_row(ui, title, selected, indent, None),
+            )
+            .inner;
+        let archive = ui
+            .add_enabled(
+                enabled,
+                egui::Button::new(if archived { "↶" } else { "×" })
+                    .frame(false)
+                    .min_size(vec2(26.0, 26.0)),
+            )
+            .on_hover_text(if archived {
+                "Restore locally"
+            } else {
+                "Archive locally"
+            });
+        (row, archive)
+    })
+    .inner
+}
+
 fn sidebar_row(
     ui: &mut egui::Ui,
     title: &str,
@@ -543,6 +648,10 @@ fn sidebar_row(
     indent: f32,
     icon: Option<Icon>,
 ) -> egui::Response {
+    let mut painter = ui.painter().clone();
+    if matches!(icon, Some(Icon::NewChat)) {
+        painter.set_opacity(1.0);
+    }
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click());
     if selected || response.hovered() {
         ui.painter().rect_filled(
@@ -558,22 +667,20 @@ fn sidebar_row(
     let mut left = rect.left() + indent;
     if let Some(icon) = icon {
         icons::paint(
-            ui.painter(),
+            &painter,
             egui::Rect::from_center_size(pos2(left + 8.0, rect.center().y), vec2(16.0, 16.0)),
             icon,
             text(),
         );
         left += 24.0;
     }
-    ui.painter()
-        .with_clip_rect(rect.shrink2(vec2(8.0, 0.0)))
-        .text(
-            pos2(left, rect.center().y),
-            Align2::LEFT_CENTER,
-            title,
-            FontId::proportional(14.0),
-            text(),
-        );
+    painter.with_clip_rect(rect.shrink2(vec2(8.0, 0.0))).text(
+        pos2(left, rect.center().y),
+        Align2::LEFT_CENTER,
+        title,
+        FontId::proportional(14.0),
+        text(),
+    );
     response.on_hover_text(title)
 }
 
@@ -589,3 +696,7 @@ fn section_label(ui: &mut egui::Ui, title: &str) {
     });
     ui.add_space(6.0);
 }
+
+#[cfg(test)]
+#[path = "../../tests/ui/chat_rows.rs"]
+mod chat_row_tests;

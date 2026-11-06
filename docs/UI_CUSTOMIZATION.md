@@ -5,6 +5,7 @@ The entire presentation layer is in `src/ui/`. Codex transport, authentication, 
 | File | Responsibility |
 | --- | --- |
 | `mod.rs` | UI entry point, settings sections, persisted appearance preferences |
+| `agents.rs` | Right-side Ollama connection, model selection, Codex task handoff, worker progress/results, and usage; transport stays in `src/delegation.rs` |
 | `packs.rs`, `layouts/` | Pack discovery, config validation, asset import, and built-in configs |
 | `picker.rs` | UI dropdown and drop target |
 | `gemini.rs` | Gemini-style home, rail, composer, and conversation layout |
@@ -70,6 +71,8 @@ To capture the startup choreography at a fixed time (in seconds), use:
 Without the preview flag, screenshot mode waits for the startup animation to finish. Do not use the preview flag for normal launches: it freezes the animation for visual verification.
 
 To verify media without a model call, create local image/GIF/video fixtures and a Markdown file linking them, then run `target/debug/codex-rust.exe --screenshot temp/screenshots/media.png --media-preview=temp/media-fixtures/preview.md`. Paths in that Markdown resolve relative to the preview file. Add `--ui=gemini` to check the other layout. This preview is only applied in screenshot mode and does not save the temporary chat.
+
+Add `--agents` in screenshot mode to inspect the Ollama panel. It only discovers installed models; it does not run a generation. `cargo test --locked` exercises the native protocol with a local mock server, permission boundaries, approval, disconnections, provider persistence, and file/command actions. A bounded live test is opt-in: set `CODEX_RUST_OLLAMA_TEST_MODEL` to an installed model and run `cargo test --locked --lib live_local_model_smoke_test -- --ignored --nocapture`. It requests at most 16 output tokens and never downloads a model.
 
 Create `temp/screenshots/` before capturing. Screenshot mode uses the current local account and conversation data, waits for connection discovery and history loading, saves one frame, and closes. Keep captures in `temp/` and review their content before sharing.
 

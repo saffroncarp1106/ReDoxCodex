@@ -174,8 +174,11 @@ impl Startup {
             context.request_repaint();
             return;
         }
-        let screen = context.content_rect();
-        let body = Rect::from_min_max(pos2(screen.left(), screen.top() + 42.0), screen.max);
+        let screen = context.viewport_rect();
+        let body = Rect::from_min_max(
+            pos2(screen.left(), (screen.top() + 42.0).min(screen.bottom())),
+            screen.max,
+        );
         let scene = Scene::capture(context, body, self.config.cursor_count, self.config.seed);
         let layer = egui::LayerId::new(egui::Order::Foreground, egui::Id::new("startup_swarm"));
         self.paint(
@@ -188,12 +191,7 @@ impl Startup {
             .order(egui::Order::Foreground)
             .fixed_pos(body.min)
             .show(context, |ui| {
-                let (rect, _) = ui.allocate_exact_size(body.size(), Sense::click_and_drag());
-                let skip =
-                    Rect::from_min_size(rect.right_bottom() - vec2(108.0, 42.0), vec2(94.0, 28.0));
-                if ui.put(skip, egui::Button::new("Skip · Esc")).clicked() {
-                    self.finished = true;
-                }
+                ui.allocate_exact_size(body.size(), Sense::click_and_drag());
             });
         context.request_repaint_after(Duration::from_millis(16));
     }

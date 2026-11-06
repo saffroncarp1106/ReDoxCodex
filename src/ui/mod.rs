@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::ForgeDesk;
 
+mod agents;
 mod capture;
+pub(super) mod clipboard;
 mod controls;
 mod conversation;
 mod dialogs;
@@ -25,21 +27,29 @@ pub(super) const PREFERENCES_KEY: &str = "codex-rust.ui.v1";
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub(super) struct Preferences {
+    pub text_colors: std::collections::BTreeMap<String, theme::TextColors>,
     pub ui: String,
     pub sidebars: std::collections::BTreeMap<String, bool>,
     pub zoom: f32,
     pub sidebar_visible: bool,
     pub startup: Option<startup::Config>,
+    pub agents_open: bool,
+    pub agent_task: String,
+    pub floating_windows: bool,
 }
 
 impl Default for Preferences {
     fn default() -> Self {
         Self {
+            text_colors: std::collections::BTreeMap::new(),
             ui: "codex".into(),
             sidebars: std::collections::BTreeMap::new(),
             zoom: 1.0,
             sidebar_visible: true,
             startup: None,
+            agents_open: false,
+            agent_task: String::new(),
+            floating_windows: false,
         }
     }
 }
@@ -67,13 +77,21 @@ pub(super) enum SettingsPage {
 
 impl ForgeDesk {
     pub(super) fn draw_ui(&mut self, context: &egui::Context) {
+        let mut palette = self.active_ui.config.colors().unwrap_or_default();
+        if let Some(colors) = self.ui_preferences.text_colors.get(&self.active_ui.id) {
+            palette = colors.apply(palette);
+        }
+        theme::update_colors(context, palette);
         self.title_bar(context);
+        self.agents_panel(context);
         if self.active_ui.config.layout == packs::Layout::Gemini {
             self.gemini_rail(context);
         } else {
             self.navigation_rail(context);
         }
-        if self.sidebar_visible {
+        if self.sidebar_visible
+            && (!self.ui_preferences.agents_open || context.viewport_rect().width() >= 1280.0)
+        {
             self.sidebar(context);
         }
         if self.active_ui.config.layout == packs::Layout::Gemini {

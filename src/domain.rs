@@ -8,6 +8,13 @@ use uuid::Uuid;
 pub const DEFAULT_MODEL: &str = "Account default";
 pub const MAX_CONTEXT_BYTES: usize = 128 * 1024;
 
+#[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, Debug)]
+pub enum Provider {
+    #[default]
+    Codex,
+    Ollama,
+}
+
 #[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Mode {
     Chat,
@@ -79,6 +86,18 @@ pub struct RunId {
 
 #[derive(Deserialize, Serialize)]
 pub struct Chat {
+    #[serde(default)]
+    pub desktop_tools: bool,
+    #[serde(default)]
+    pub delegation_tools: bool,
+    #[serde(default)]
+    pub delegated_tasks: Vec<crate::delegation::Task>,
+    #[serde(default)]
+    pub provider: Provider,
+    #[serde(default)]
+    pub ollama_model: String,
+    #[serde(default)]
+    pub ollama_usage: crate::ollama::Usage,
     pub id: Uuid,
     pub title: String,
     pub draft: String,
@@ -97,8 +116,25 @@ pub struct Chat {
 }
 
 impl Chat {
+    pub fn is_blank(&self) -> bool {
+        !self.archived
+            && self.title == "New chat"
+            && self.messages.is_empty()
+            && self.draft.trim().is_empty()
+            && self.attachments.is_empty()
+            && self.thread_id.is_none()
+            && self.previous_thread_ids.is_empty()
+            && self.delegated_tasks.is_empty()
+    }
+
     pub fn new(workspace: Option<PathBuf>) -> Self {
         Self {
+            desktop_tools: false,
+            delegation_tools: false,
+            delegated_tasks: Vec::new(),
+            provider: Provider::Codex,
+            ollama_model: String::new(),
+            ollama_usage: crate::ollama::Usage::default(),
             id: Uuid::new_v4(),
             title: "New chat".into(),
             draft: String::new(),
@@ -119,7 +155,26 @@ impl Chat {
         }
     }
 
+    pub fn set_workspace(&mut self, workspace: Option<PathBuf>) {
+        if self.workspace != workspace {
+            self.reset_server_thread();
+            self.workspace = workspace;
+        }
+    }
+
+    pub fn set_provider(&mut self, provider: Provider, model: String) {
+        if self.provider != provider {
+            self.reset_server_thread();
+        }
+        self.provider = provider;
+        if provider == Provider::Ollama {
+            self.ollama_model = model;
+        }
+    }
+
     fn reset_server_thread(&mut self) {
+        self.desktop_tools = false;
+        self.delegation_tools = false;
         if let Some(thread) = self.thread_id.take() {
             self.previous_thread_ids.push(thread);
         }
@@ -129,6 +184,9 @@ impl Chat {
 #[derive(Deserialize, Serialize)]
 #[serde(default)]
 pub struct Session {
+    pub desktop: crate::desktop::Settings,
+    pub local_archive_overrides: BTreeMap<String, bool>,
+    pub ollama: crate::ollama::Settings,
     pub chats: Vec<Chat>,
     pub active_chat: Option<Uuid>,
     pub workspace: Option<PathBuf>,
@@ -143,6 +201,9 @@ pub struct Session {
 impl Default for Session {
     fn default() -> Self {
         Self {
+            desktop: crate::desktop::Settings::default(),
+            local_archive_overrides: BTreeMap::new(),
+            ollama: crate::ollama::Settings::default(),
             chats: Vec::new(),
             active_chat: None,
             workspace: None,
@@ -164,6 +225,22 @@ impl Session {
         }
 
         for chat in &mut self.chats {
+            if let Some(thread) = &chat.thread_id {
+                if chat.archived {
+                    self.local_archive_overrides
+                        .entry(thread.clone())
+                        .or_insert(true);
+                }
+                if let Some(archived) = self.local_archive_overrides.get(thread) {
+                    chat.archived = *archived;
+                }
+            }
+            for task in &mut chat.delegated_tasks {
+                if task.status == crate::delegation::Status::Running {
+                    task.status = crate::delegation::Status::Interrupted;
+                    task.progress.clear();
+                }
+            }
             if self.tool_access_version < 2 {
                 chat.mode = Mode::Code;
                 chat.reset_server_thread();
@@ -186,6 +263,22 @@ impl Session {
     }
 
     pub fn prepare_run(&mut self) -> Result<RunId, String> {
+        let desktop = self.desktop.enabled && crate::desktop::SUPPORTED;
+        if let Some(chat) = self.active_mut()
+            && chat.provider == Provider::Codex
+            && chat.desktop_tools != desktop
+        {
+            chat.reset_server_thread();
+        }
+        let delegate =
+            self.ollama.codex_delegation && !self.ollama.preferred_model.trim().is_empty();
+        if let Some(chat) = self.active_mut()
+            && chat.provider == Provider::Codex
+            && delegate
+            && !chat.delegation_tools
+        {
+            chat.reset_server_thread();
+        }
         if self.chats.iter().any(|chat| {
             chat.messages
                 .iter()
@@ -194,7 +287,17 @@ impl Session {
             return Err("Stop the current response before starting another.".into());
         }
 
-        let model = self.model.trim().to_owned();
+        let model = if let Some(chat) = self
+            .active()
+            .filter(|chat| chat.provider == Provider::Ollama)
+        {
+            if chat.ollama_model.trim().is_empty() {
+                return Err("Choose an Ollama model in Agents first.".into());
+            }
+            format!("Ollama · {}", chat.ollama_model)
+        } else {
+            self.model.trim().to_owned()
+        };
 
         if model.is_empty() {
             return Err("Choose a model in settings first.".into());
@@ -211,7 +314,7 @@ impl Session {
             return Err("Enter a prompt in an unarchived chat.".into());
         }
 
-        let history_bytes: usize = if chat.thread_id.is_some() {
+        let history_bytes: usize = if chat.provider == Provider::Codex && chat.thread_id.is_some() {
             0
         } else {
             chat.messages
@@ -299,12 +402,77 @@ impl Session {
             message.status = status;
             message.error = error;
         }
+        if status != MessageStatus::Complete
+            && let Some(chat) = self.chats.iter_mut().find(|chat| chat.id == run.chat)
+        {
+            for task in &mut chat.delegated_tasks {
+                if task.status == crate::delegation::Status::Running {
+                    task.status = if status == MessageStatus::Cancelled {
+                        crate::delegation::Status::Cancelled
+                    } else {
+                        crate::delegation::Status::Interrupted
+                    };
+                    task.progress.clear();
+                }
+            }
+        }
     }
 
     pub fn new_chat(&mut self) {
-        let chat = Chat::new(self.workspace.clone());
+        let (provider, model) = self
+            .active()
+            .map_or((Provider::Codex, String::new()), |chat| {
+                (chat.provider, chat.ollama_model.clone())
+            });
+        let matches = |chat: &&Chat| {
+            chat.is_blank()
+                && chat.workspace == self.workspace
+                && chat.provider == provider
+                && (provider != Provider::Ollama || chat.ollama_model == model)
+        };
+        let reusable = self
+            .active()
+            .filter(matches)
+            .or_else(|| self.chats.iter().rev().find(matches))
+            .map(|chat| chat.id);
+        if let Some(id) = reusable {
+            self.active_chat = Some(id);
+            return;
+        }
+        let mut chat = Chat::new(self.workspace.clone());
+        if let Some(active) = self.active() {
+            chat.provider = active.provider;
+            chat.ollama_model = active.ollama_model.clone();
+        }
         self.active_chat = Some(chat.id);
         self.chats.push(chat);
+    }
+
+    pub fn set_chat_archived(&mut self, id: Uuid, archived: bool) -> bool {
+        let Some(target) = self.chats.iter().find(|chat| chat.id == id) else {
+            return false;
+        };
+        let thread = target.thread_id.clone();
+        let same = |chat: &Chat| {
+            chat.id == id
+                || thread
+                    .as_ref()
+                    .is_some_and(|thread| chat.thread_id.as_ref() == Some(thread))
+        };
+        if self.chats.iter().filter(|chat| same(chat)).any(|chat| {
+            chat.messages
+                .iter()
+                .any(|message| message.status == MessageStatus::Streaming)
+        }) {
+            return false;
+        }
+        for chat in self.chats.iter_mut().filter(|chat| same(chat)) {
+            chat.archived = archived;
+        }
+        if let Some(thread) = thread {
+            self.local_archive_overrides.insert(thread, archived);
+        }
+        true
     }
 
     pub fn active(&self) -> Option<&Chat> {
@@ -319,3 +487,7 @@ impl Session {
             .find(|chat| Some(chat.id) == self.active_chat)
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/transport/chat_lifecycle.rs"]
+mod lifecycle_tests;

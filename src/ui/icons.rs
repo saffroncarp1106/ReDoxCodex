@@ -15,7 +15,8 @@ pub enum Icon {
     Bell,
     Search,
     More,
-    Sliders,
+    Agent,
+    Bolt,
     Shield,
     Mic,
     ArrowUp,
@@ -197,14 +198,26 @@ pub fn paint(painter: &egui::Painter, rect: Rect, icon: Icon, color: Color32) {
                 painter.circle_filled(point(x, 12.), 1.25, color);
             }
         }
-        Icon::Sliders => {
-            for y in [5., 12., 19.] {
-                path(&[(3., y), (21., y)]);
-            }
-            for (x, y) in [(8., 5.), (16., 12.), (10., 19.)] {
-                painter.circle_filled(point(x, y), 2.5, super::theme::background());
-                painter.circle_stroke(point(x, y), 2.2, stroke);
-            }
+        Icon::Agent => {
+            box_at((4., 7.), (20., 20.), 3);
+            path(&[(12., 7.), (12., 3.)]);
+            painter.circle_filled(point(12., 2.), 1.2, color);
+            painter.circle_filled(point(8., 12.), 1.2, color);
+            painter.circle_filled(point(16., 12.), 1.2, color);
+            path(&[(8., 16.), (16., 16.)]);
+            path(&[(1., 11.), (1., 16.)]);
+            path(&[(23., 11.), (23., 16.)]);
+        }
+        Icon::Bolt => {
+            path(&[
+                (13., 2.),
+                (5., 13.),
+                (11., 13.),
+                (10., 22.),
+                (20., 9.),
+                (13., 9.),
+                (13., 2.),
+            ]);
         }
         Icon::Shield => {
             path(&[

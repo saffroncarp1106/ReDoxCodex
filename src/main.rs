@@ -38,7 +38,8 @@ fn main() -> eframe::Result {
         window_builder: Some(Box::new(ForgeDesk::validate_window_size)),
         persist_window: capture_path.is_none(),
         persistence_path: if cfg!(debug_assertions) {
-            std::env::var_os("CODEX_RUST_VERIFY_UI_RESTART")
+            std::env::var_os("CODEX_RUST_STATE_DIR")
+                .or_else(|| std::env::var_os("CODEX_RUST_VERIFY_UI_RESTART"))
                 .map(|path| std::path::PathBuf::from(path).join("state.ron"))
         } else {
             None

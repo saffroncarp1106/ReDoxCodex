@@ -12,6 +12,24 @@ impl ForgeDesk {
     pub(in crate::app) fn settings(&mut self, context: &egui::Context) {
         let mut open = self.settings_open;
         let animation_was_active = self.startup.is_active();
+        if self.ui_preferences.floating_windows {
+            if !open || animation_was_active {
+                return;
+            }
+            super::window_frame::native_popup(
+                context,
+                "native_settings",
+                "Settings",
+                vec2(760.0, 560.0),
+                &mut open,
+                |ui| {
+                    let child = ui.ctx().clone();
+                    self.settings_body(ui, &child);
+                },
+            );
+            self.settings_open = open && self.settings_open && !self.startup.is_active();
+            return;
+        }
         let available = context.content_rect().size();
         let size = vec2(
             (available.x - 40.0).clamp(480.0, 740.0),
@@ -25,57 +43,61 @@ impl ForgeDesk {
             .resizable(false)
             .collapsible(false)
             .show(context, |ui| {
-                ui.add_space(8.0);
-                let pages = [
-                    (SettingsPage::Account, "Account"),
-                    (SettingsPage::Models, "Models & reasoning"),
-                    (SettingsPage::Workspace, "Workspace & access"),
-                    (SettingsPage::Appearance, "Appearance"),
-                    (SettingsPage::Cursors, "Cursor animation"),
-                    (SettingsPage::Advanced, "Advanced"),
-                ];
-                if ui.available_width() < 620.0 {
-                    let title = pages
-                        .iter()
-                        .find(|(page, _)| *page == self.settings_page)
-                        .map_or("Account", |(_, title)| *title);
-                    egui::ComboBox::from_id_salt("settings_section")
-                        .selected_text(title)
-                        .show_ui(ui, |ui| {
-                            for (page, label) in pages {
-                                ui.selectable_value(&mut self.settings_page, page, label);
-                            }
-                        });
-                    ui.separator();
-                    self.settings_content(ui, context);
-                } else {
-                    ui.horizontal_top(|ui| {
-                        ui.allocate_ui_with_layout(
-                            vec2(150.0, (ui.available_height() - 8.0).max(200.0)),
-                            Layout::top_down(Align::Min),
-                            |ui| {
-                                ui.spacing_mut().item_spacing.y = 6.0;
-                                for (page, label) in pages {
-                                    let selected = self.settings_page == page;
-                                    let button = egui::Button::new(label)
-                                        .fill(if selected {
-                                            surface()
-                                        } else {
-                                            Color32::TRANSPARENT
-                                        })
-                                        .corner_radius(8);
-                                    if ui.add_sized([145.0, 36.0], button).clicked() {
-                                        self.settings_page = page;
-                                    }
-                                }
-                            },
-                        );
-                        ui.separator();
-                        self.settings_content(ui, context);
-                    });
-                }
+                self.settings_body(ui, context);
             });
         self.settings_open = open && (animation_was_active || !self.startup.is_active());
+    }
+
+    fn settings_body(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
+        ui.add_space(8.0);
+        let pages = [
+            (SettingsPage::Account, "Account"),
+            (SettingsPage::Models, "Models & reasoning"),
+            (SettingsPage::Workspace, "Workspace & access"),
+            (SettingsPage::Appearance, "Appearance"),
+            (SettingsPage::Cursors, "Cursor animation"),
+            (SettingsPage::Advanced, "Advanced"),
+        ];
+        if ui.available_width() < 620.0 {
+            let title = pages
+                .iter()
+                .find(|(page, _)| *page == self.settings_page)
+                .map_or("Account", |(_, title)| *title);
+            egui::ComboBox::from_id_salt("settings_section")
+                .selected_text(title)
+                .show_ui(ui, |ui| {
+                    for (page, label) in pages {
+                        ui.selectable_value(&mut self.settings_page, page, label);
+                    }
+                });
+            ui.separator();
+            self.settings_content(ui, context);
+        } else {
+            ui.horizontal_top(|ui| {
+                ui.allocate_ui_with_layout(
+                    vec2(150.0, (ui.available_height() - 8.0).max(200.0)),
+                    Layout::top_down(Align::Min),
+                    |ui| {
+                        ui.spacing_mut().item_spacing.y = 6.0;
+                        for (page, label) in pages {
+                            let selected = self.settings_page == page;
+                            let button = egui::Button::new(label)
+                                .fill(if selected {
+                                    surface()
+                                } else {
+                                    Color32::TRANSPARENT
+                                })
+                                .corner_radius(8);
+                            if ui.add_sized([145.0, 36.0], button).clicked() {
+                                self.settings_page = page;
+                            }
+                        }
+                    },
+                );
+                ui.separator();
+                self.settings_content(ui, context);
+            });
+        }
     }
 
     fn settings_content(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
@@ -273,10 +295,56 @@ impl ForgeDesk {
             self.pick_workspace(context);
         }
         ui.label(
-            RichText::new("Opening a project creates or selects a chat for that folder.")
+            RichText::new("Opening a project creates or selects a chat for that folder. If this chat's folder is missing, it reconnects this chat and keeps your draft.")
                 .small()
                 .color(muted()),
         );
+        let selected = self.session.workspace.clone();
+        if self
+            .session
+            .active()
+            .is_some_and(|chat| chat.workspace != selected)
+            && selected.as_ref().is_some_and(|path| path.is_dir())
+            && ui
+                .add_enabled(
+                    self.running.is_none(),
+                    egui::Button::new("Use selected project for this chat"),
+                )
+                .clicked()
+            && let Some(chat) = self.session.active_mut()
+        {
+            chat.set_workspace(selected);
+        }
+        if let Some(path) = self
+            .session
+            .active()
+            .and_then(|chat| chat.workspace.as_ref())
+            && !path.is_dir()
+        {
+            ui.colored_label(Color32::LIGHT_RED, "This chat's project folder no longer exists. Select a valid project and use it for this chat.");
+        }
+        ui.add_space(20.0);
+        ui.label(RichText::new("Desktop control").font(theme::semibold(14.0)));
+        ui.add_enabled_ui(
+            forgedesk::desktop::SUPPORTED && self.running.is_none(),
+            |ui| {
+                ui.checkbox(
+                    &mut self.session.desktop.enabled,
+                    "Allow Codex to see and control this desktop",
+                );
+                ui.add_enabled_ui(self.session.desktop.enabled, |ui| {
+                    ui.checkbox(
+                        &mut self.session.desktop.confirm_actions,
+                        "Ask before mouse and keyboard control each response",
+                    );
+                });
+            },
+        );
+        ui.label(RichText::new(if forgedesk::desktop::SUPPORTED {
+            "Codex can capture the screens, list and focus windows, click, scroll, drag, type, and press keys in other apps. Screenshots are sent to the selected Codex model. Use Stop to cancel, or hold Escape to block desktop actions. This setting is separate from project file access and applies on the next response. Local Ollama agents do not receive desktop tools."
+        } else {
+            "Native desktop control currently supports Windows. Other platforms retain their existing chat and project features."
+        }).small().color(muted()));
         ui.add_space(20.0);
         ui.label(RichText::new("Current chat permissions").font(theme::semibold(14.0)));
         if let Some(chat) = self.session.active_mut() {
@@ -318,6 +386,50 @@ impl ForgeDesk {
             ui.colored_label(Color32::LIGHT_RED, error);
         }
         ui.add_space(12.0);
+        ui.label(RichText::new("Text colors").font(theme::semibold(14.0)));
+        let base = self.active_ui.config.colors().unwrap_or_default();
+        let mut colors = self
+            .ui_preferences
+            .text_colors
+            .get(&self.active_ui.id)
+            .cloned()
+            .unwrap_or_default();
+        let mut changed = false;
+        for (label, choice, fallback) in [
+            ("Top row text", &mut colors.menu, base.menu_text),
+            ("General text", &mut colors.general, base.text),
+            (
+                "Text box background",
+                &mut colors.input_background,
+                base.input_background,
+            ),
+        ] {
+            ui.horizontal(|ui| {
+                let mut rgb = choice.unwrap_or([fallback.r(), fallback.g(), fallback.b()]);
+                if ui.color_edit_button_srgb(&mut rgb).changed() {
+                    *choice = Some(rgb);
+                    changed = true;
+                }
+                ui.label(label);
+                ui.label(
+                    RichText::new(format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]))
+                        .small()
+                        .color(muted()),
+                );
+            });
+        }
+        ui.label(RichText::new("Top row controls File, Edit, View, Help, and the UI selector. General text controls the main interface and chat text. Changes apply live and are saved separately for each layout.").small().color(muted()));
+        if ui.button("Restore text colors").clicked() {
+            colors = theme::TextColors::default();
+            changed = true;
+        }
+        if changed {
+            self.ui_preferences
+                .text_colors
+                .insert(self.active_ui.id.clone(), colors);
+            context.request_repaint_of(egui::ViewportId::ROOT);
+        }
+        ui.add_space(12.0);
         ui.label(RichText::new("Interface scale").font(theme::semibold(14.0)));
         let mut percent = self.ui_preferences.zoom * 100.0;
         let changed = ui
@@ -343,8 +455,20 @@ impl ForgeDesk {
         }
         ui.add_space(16.0);
         ui.checkbox(&mut self.sidebar_visible, "Show project and chat sidebar");
+        if ui
+            .checkbox(
+                &mut self.ui_preferences.floating_windows,
+                "Allow popup windows outside the app",
+            )
+            .changed()
+        {
+            context.request_repaint_of(egui::ViewportId::ROOT);
+        }
+        ui.label(RichText::new("Settings, usage, rename, and approval dialogs open as separate desktop windows. Turn this off to keep them inside the app.").small().color(muted()));
         ui.add_space(16.0);
         if ui.button("Restore default appearance").clicked() {
+            self.ui_preferences.text_colors.remove(&self.active_ui.id);
+            context.request_repaint_of(egui::ViewportId::ROOT);
             self.ui_preferences.zoom = Preferences::default().zoom;
             self.sidebar_visible = true;
             context.set_zoom_factor(1.0);

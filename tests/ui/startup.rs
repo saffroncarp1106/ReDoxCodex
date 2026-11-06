@@ -71,6 +71,9 @@ fn animation_covers_the_page_from_the_first_frame() {
                 context
                     .layer_painter(egui::LayerId::background())
                     .rect_filled(page, 0, Color32::RED);
+                egui::TopBottomPanel::bottom("tall_composer")
+                    .exact_height(861.0)
+                    .show(context, |_| {});
                 startup.draw(context);
             },
         );

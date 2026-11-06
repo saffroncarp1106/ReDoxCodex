@@ -11,7 +11,9 @@
     "sidebar": "#161616",
     "rail": "#101010",
     "surface": "#202124",
+    "input_background": "#202124",
     "text": "#E3E3E3",
+    "menu_text": "#808080",
     "muted": "#ADB1B8",
     "border": "#30343B",
     "accent": "#8BAAFF"

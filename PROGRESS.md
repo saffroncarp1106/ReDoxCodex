@@ -1,5 +1,17 @@
 # Progress
 
+## Codex-controlled Ollama delegation — November 5, 2026
+
+Codex can now call the app-provided `delegate_to_ollama` tool against the model selected in Agents, with the parent's project, access mode, and cancellation signal. Local worker output is returned to Codex as a tool result for review while progress/output are shown separately in Agents. The panel can also send an explicit delegation request to the main Codex chat. File-change approvals flow through the parent run, local usage is counted separately, and persisted task logs recover interrupted states after restart. Existing conversations migrate to a tool-enabled server thread while preserving their transcript. Tool arguments cannot select another server, model, workspace, or permission mode.
+
+Verified 43 automated tests, including the delegation bridge, selected-model binding, approval rejection, thread migration, cancellation/log recovery, and usage forwarding. The installed Codex server accepted the dynamic tool in a separate read-only registration check without starting a model generation. The previous live Qwen chat/project-read checks remain documented below.
+
+## Native Ollama agents — November 5, 2026
+
+Added the right-side Agents panel in both layouts, native installed-model discovery and streamed chat, per-chat Codex/Ollama routing, persisted connection/model settings, and local token/request/speed statistics. New chats inherit the selected provider. Tool-capable local models can inspect projects and request file changes or commands through the existing approval flow. Read-only mode forbids mutations and commands; workspace file tools enforce canonical project boundaries, while shell commands explicitly require approval and run without an OS sandbox. Replaced files are backed up. Native transports and actions remain outside `src/ui/`.
+
+Verified 37 automated tests, formatting, Clippy, and the pinned-toolchain build. Separate live checks against the installed Qwen 3.5 4B model passed for a three-token response and a real read of an unknown random project fixture through the agent tool loop. The live project check used 202 total output tokens. Ollama's GPU runner failed CUDA initialization on this machine; the new CPU-only request option succeeded. No model downloads or Codex generations were used for these checks. Native screenshots verify the Agents panel and model discovery in both layouts. Narrow windows temporarily hide the left chat sidebar while Agents is open.
+
 ## Native UI and media updates — November 5, 2026
 
 Startup covers the conversation from the first frame and recovers unusably small saved window sizes. Both layouts have wider inset conversation scrollbars and shorter prompt boxes. Cursor animation settings support editable and selected names, palette presets, custom colors, replay, and persisted preferences, with source credits to Dhvanil Patel and Joel Califa. Current chosen cursor settings are bundled as release defaults. Usage bars now fill with the remaining allowance.

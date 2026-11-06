@@ -31,6 +31,7 @@ Import a file or pack folder by dragging it into the app. Alternatively use UI â
     "rail": "#101418",
     "surface": "#202A35",
     "text": "#E4EDF6",
+    "menu_text": "#808080",
     "muted": "#A2B4C7",
     "border": "#344353",
     "accent": "#86BCFF"
@@ -41,6 +42,10 @@ Import a file or pack folder by dragging it into the app. Alternatively use UI â
 Optional: add `"background_image": "background.png"` and include that file beside the config. Subdirectories are supported. Images must be PNG, at most 8 MiB and 4096 Ã— 4096 pixels. Asset references must stay within the pack folder. Background images are supported by both base layouts; the radial glow applies to Gemini's empty home screen.
 
 `layout` accepts `codex` or `gemini`. Other fields are optional and inherit defaults. Colors use six-digit RGB hex strings. `glow_strength` ranges from 0 to 1. Labels are bounded, and configs must be at most 64 KiB. Unknown fields and invalid values produce an explicit error. Copy the complete built-in Gemini config when you want its exact palette as your starting point.
+
+`codex.json` includes every adjustable palette key and a `palette_guide` object describing what each one controls. The guide is optional documentation metadata; edit the actual hex values under `palette`. `menu_text` controls the top menu labels independently of `text` (general text) and `muted` (secondary text and icons). Appearance color-picker choices override `menu_text` and `text` for that layout until **Restore text colors** is selected.
+
+`input_background` controls the message input box independently of `surface`. When omitted, it inherits `surface` for compatibility with existing packs. The Appearance page also provides a **Text box background** picker, saved separately for each layout; **Restore text colors** clears that override along with the text overrides.
 
 `sidebar_default` is used on first selection. Later choices are remembered separately for each pack. UI selection, chats, drafts, workspace, and model/effort choices survive restart. A missing selected pack falls back to Codex. The cursor animation reads actual rendered geometry from either layout. Customize it in Settings â†’ Cursor animation; saved choices apply to both layouts. `src/ui/startup.json` supplies the initial defaults before personal overrides are saved.
 

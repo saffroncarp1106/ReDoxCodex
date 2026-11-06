@@ -9,8 +9,9 @@ use forgedesk::attachments::{Attachment, MAX_ATTACHMENTS};
 use forgedesk::codex::{
     self, Approval, ChatRequest, ConnectionInfo, LoginChallenge, LoginEvent, ModelInfo,
 };
-use forgedesk::domain::{DEFAULT_MODEL, MessageStatus, Session};
+use forgedesk::domain::{DEFAULT_MODEL, MessageStatus, Provider, Session};
 use forgedesk::history::{self, ConversationPage, HistoryEntry, HistoryPage};
+use forgedesk::ollama;
 use forgedesk::run::{self, RunEvent, Running, Update};
 use forgedesk::usage::UsageInfo;
 
@@ -22,6 +23,7 @@ use ui::theme;
 const STORAGE_KEY: &str = "forgedesk.session.v1";
 
 enum Event {
+    OllamaModels(u64, String, Result<Vec<ollama::Model>, String>),
     UiImport(Result<String, String>),
     History(u64, bool, Result<HistoryPage, String>),
     Conversation(
@@ -38,6 +40,14 @@ enum Event {
 }
 
 pub struct ForgeDesk {
+    focus_prompt: bool,
+    prompt_input_id: Option<egui::Id>,
+    paste_gate: ui::clipboard::PasteGate,
+    ollama_models: Vec<ollama::Model>,
+    ollama_connecting: bool,
+    ollama_error: Option<String>,
+    ollama_endpoint: Option<String>,
+    ollama_generation: u64,
     active_ui: ui::packs::Pack,
     ui_catalog: ui::packs::Catalog,
     ui_folder: PathBuf,
@@ -124,7 +134,11 @@ impl ForgeDesk {
         if capture_path.is_none() {
             ui_preferences.ui = active_ui.id.clone();
         }
-        theme::set_palette(active_ui.config.colors().unwrap_or_default());
+        let mut palette = active_ui.config.colors().unwrap_or_default();
+        if let Some(colors) = ui_preferences.text_colors.get(&active_ui.id) {
+            palette = colors.apply(palette);
+        }
+        theme::set_palette(palette);
         theme::apply(&context.egui_ctx);
         let ui_background = active_ui
             .config
@@ -180,6 +194,14 @@ impl ForgeDesk {
         let (run_sender, run_receiver) = tokio::sync::mpsc::channel(128);
 
         let mut app = Self {
+            focus_prompt: true,
+            prompt_input_id: None,
+            paste_gate: ui::clipboard::PasteGate::default(),
+            ollama_models: Vec::new(),
+            ollama_connecting: false,
+            ollama_error: None,
+            ollama_endpoint: None,
+            ollama_generation: 0,
             active_ui,
             ui_catalog,
             ui_folder,
@@ -236,6 +258,7 @@ impl ForgeDesk {
             settings_page: ui::SettingsPage::default(),
         };
         app.refresh_models(&context.egui_ctx);
+        app.refresh_ollama(&context.egui_ctx);
         app
     }
 
@@ -371,6 +394,18 @@ impl ForgeDesk {
         }
         self.attachment_error = None;
 
+        if let Err(error) = codex::validate_workspace(
+            self.session
+                .active()
+                .and_then(|chat| chat.workspace.as_deref()),
+        ) {
+            self.attachment_error = Some(error.clone());
+            self.status = error;
+            self.settings_page = ui::SettingsPage::Workspace;
+            self.settings_open = true;
+            return;
+        }
+
         let id = match self.session.prepare_run() {
             Ok(id) => id,
             Err(error) => {
@@ -384,15 +419,31 @@ impl ForgeDesk {
             return;
         };
 
-        let mut request = ChatRequest::from_chat(chat, self.effective_model().to_owned());
-        request.effort = self.selected_effort();
+        let request = if chat.provider == Provider::Ollama {
+            run::Request::Ollama(ollama::Request::from_chat(
+                chat,
+                self.session.ollama.clone(),
+            ))
+        } else {
+            let mut request = ChatRequest::from_chat(chat, self.effective_model().to_owned());
+            request.desktop = self.session.desktop.clone();
+            if self.session.ollama.codex_delegation
+                && !self.session.ollama.preferred_model.trim().is_empty()
+            {
+                request.delegation = Some(self.session.ollama.clone());
+            }
+            request.effort = self.selected_effort();
+            run::Request::Codex {
+                request,
+                executable: self.session.codex_path.clone(),
+            }
+        };
 
         if let Some(runtime) = &self.runtime {
             self.running = Some(Running::start(
                 runtime,
                 id,
                 request,
-                self.session.codex_path.clone(),
                 self.run_sender.clone(),
                 context.clone(),
             ));
@@ -407,6 +458,156 @@ impl ForgeDesk {
             self.session
                 .finish_run(running.id, MessageStatus::Cancelled, None);
             self.status = "Cancelled. Partial response kept.".into();
+        }
+    }
+
+    fn is_ollama(&self) -> bool {
+        self.session
+            .active()
+            .is_some_and(|chat| chat.provider == Provider::Ollama)
+    }
+
+    fn refresh_ollama(&mut self, context: &egui::Context) {
+        let Some(runtime) = &self.runtime else {
+            return;
+        };
+        self.ollama_generation += 1;
+        let generation = self.ollama_generation;
+        let endpoint = self
+            .session
+            .ollama
+            .endpoint
+            .trim()
+            .trim_end_matches('/')
+            .to_owned();
+        self.session.ollama.endpoint = endpoint.clone();
+        self.ollama_connecting = true;
+        self.ollama_error = None;
+        self.ollama_endpoint = None;
+        self.ollama_models.clear();
+        let sender = self.sender.clone();
+        let context = context.clone();
+        runtime.spawn(async move {
+            let result = ollama::list_models(&endpoint).await;
+            let _ = sender.send(Event::OllamaModels(generation, endpoint, result));
+            context.request_repaint();
+        });
+    }
+
+    fn use_ollama(&mut self, new_chat: bool) {
+        if self.running.is_some() || self.history_reading.is_some() {
+            return;
+        }
+        let model = self.session.ollama.preferred_model.clone();
+        if model.is_empty()
+            || !self.ollama_models.iter().any(|entry| entry.name == model)
+            || self.ollama_endpoint.as_deref() != Some(self.session.ollama.endpoint.as_str())
+        {
+            self.ollama_error =
+                Some("Connect to Ollama and choose an installed model first.".into());
+            return;
+        }
+        if new_chat {
+            self.new_chat();
+        }
+        if let Some(chat) = self.session.active_mut() {
+            chat.set_provider(Provider::Ollama, model.clone());
+        }
+        self.status = format!("Ollama · {model}. Ready for your request.");
+        self.focus_prompt = true;
+    }
+
+    fn new_chat(&mut self) {
+        self.session.new_chat();
+        self.show_archived = false;
+        self.focus_prompt = true;
+    }
+
+    fn can_new_chat(&self) -> bool {
+        self.show_archived
+            || !self
+                .session
+                .active()
+                .is_some_and(|chat| chat.is_blank() && chat.workspace == self.session.workspace)
+    }
+
+    fn archive_local_chat(&mut self, id: uuid::Uuid, archived: bool) {
+        if !self.session.set_chat_archived(id, archived) {
+            return;
+        }
+        if archived && self.session.active_chat == Some(id) && !self.show_archived {
+            let next = self
+                .session
+                .chats
+                .iter()
+                .rev()
+                .find(|chat| !chat.archived)
+                .map(|chat| chat.id);
+            if let Some(next) = next {
+                self.session.active_chat = Some(next);
+            } else {
+                self.new_chat();
+            }
+        }
+    }
+
+    fn archive_history_locally(&mut self, thread: &str) {
+        let id = if let Some(chat) = self
+            .session
+            .chats
+            .iter()
+            .find(|chat| chat.thread_id.as_deref() == Some(thread))
+        {
+            chat.id
+        } else {
+            let Some(entry) = self.history.iter().find(|entry| entry.id == thread) else {
+                return;
+            };
+            let mut chat = forgedesk::domain::Chat::new(Some(entry.cwd.clone()));
+            chat.title = entry.title();
+            chat.thread_id = Some(thread.into());
+            let id = chat.id;
+            self.session.chats.push(chat);
+            id
+        };
+        self.archive_local_chat(id, true);
+    }
+
+    fn use_codex(&mut self) {
+        if self.running.is_some() {
+            return;
+        }
+        if let Some(chat) = self.session.active_mut() {
+            chat.set_provider(Provider::Codex, String::new());
+        }
+        self.status = "This chat uses Codex / ChatGPT.".into();
+    }
+
+    fn ask_codex_to_delegate(&mut self, context: &egui::Context) {
+        if self.running.is_some()
+            || self.is_ollama()
+            || self.history_reading.is_some()
+            || !self.session.ollama.codex_delegation
+            || self.session.ollama.preferred_model.trim().is_empty()
+        {
+            return;
+        }
+        let task = self.ui_preferences.agent_task.trim().to_owned();
+        if task.is_empty() {
+            return;
+        }
+        let Some(chat) = self.session.active_mut() else {
+            return;
+        };
+        if chat.archived || !chat.draft.trim().is_empty() {
+            return;
+        }
+        chat.draft = format!(
+            "Delegate the following task to the Ollama agent selected in Agents using delegate_to_ollama, then review its result and report back. Keep the local worker within the current project's access mode.\n\n{task}"
+        );
+        self.send_prompt(context);
+        if self.running.is_some() {
+            self.ui_preferences.agent_task.clear();
         }
     }
 
@@ -573,6 +774,37 @@ impl ForgeDesk {
         });
     }
 
+    fn paste_clipboard_attachments(&mut self, context: &egui::Context) -> bool {
+        let payload = match forgedesk::clipboard::capture() {
+            Ok(Some(payload)) => payload,
+            Ok(None) => return false,
+            Err(error) => {
+                self.attachment_error = Some(format!("Could not paste attachments: {error}"));
+                return false;
+            }
+        };
+        if self.picking_files {
+            self.attachment_error = Some(
+                "Wait for the current attachments to finish loading, then paste again.".into(),
+            );
+            return true;
+        }
+        let Some(chat) = self.session.active().filter(|chat| !chat.archived) else {
+            return false;
+        };
+        let chat_id = chat.id;
+        self.picking_files = true;
+        self.attachment_error = None;
+        let sender = self.sender.clone();
+        let context = context.clone();
+        thread::spawn(move || {
+            let result = forgedesk::clipboard::attachment_paths(payload).and_then(read_attachments);
+            let _ = sender.send(Event::Attachments(chat_id, result));
+            context.request_repaint();
+        });
+        true
+    }
+
     fn pick_codex_executable(&mut self, context: &egui::Context) {
         let sender = self.sender.clone();
         let context = context.clone();
@@ -618,9 +850,18 @@ impl ForgeDesk {
 
             let active = self.running.as_ref().map(|running| running.id);
             let id = event.run;
+            let local = self
+                .session
+                .chats
+                .iter()
+                .find(|chat| chat.id == id.chat)
+                .is_some_and(|chat| chat.provider == Provider::Ollama);
 
             if active == Some(id) {
                 match event.update {
+                    Update::Delegation(forgedesk::delegation::Event::Started(_)) => {
+                        self.ui_preferences.agents_open = true;
+                    }
                     Update::Approval(approval) => {
                         self.approval = Some(approval);
                         self.status = "Waiting for your approval.".into();
@@ -649,15 +890,43 @@ impl ForgeDesk {
                     })
                     .and_then(|message| message.error.clone())
                     .unwrap_or_else(|| "Response complete.".into());
-                if self.usage_open {
+                if self.usage_open && !local {
                     self.refresh_usage(context);
                 }
-                self.refresh_history(context, false);
+                if !local {
+                    self.refresh_history(context, false);
+                }
             }
         }
 
         while let Ok(event) = self.receiver.try_recv() {
             match event {
+                Event::OllamaModels(generation, endpoint, result) => {
+                    if generation != self.ollama_generation {
+                        continue;
+                    }
+                    self.ollama_connecting = false;
+                    match result {
+                        Ok(models) => {
+                            if !models
+                                .iter()
+                                .any(|entry| entry.name == self.session.ollama.preferred_model)
+                            {
+                                self.session.ollama.preferred_model = models
+                                    .iter()
+                                    .find(|entry| entry.name == "qwen3.5:9b")
+                                    .or_else(|| {
+                                        models.iter().find(|entry| entry.name.contains("qwen"))
+                                    })
+                                    .or_else(|| models.first())
+                                    .map_or_else(String::new, |entry| entry.name.clone());
+                            }
+                            self.ollama_models = models;
+                            self.ollama_endpoint = Some(endpoint);
+                        }
+                        Err(error) => self.ollama_error = Some(error),
+                    }
+                }
                 Event::UiImport(result) => {
                     self.importing_ui = false;
                     self.settings_open = true;
@@ -752,6 +1021,7 @@ impl ForgeDesk {
                 }
                 Event::Models(result) => {
                     self.refreshing = false;
+                    let local_status = self.is_ollama().then(|| self.status.clone());
 
                     match result {
                         Ok(info) => {
@@ -779,6 +1049,9 @@ impl ForgeDesk {
                             self.status = error;
                         }
                     }
+                    if let Some(status) = local_status {
+                        self.status = status;
+                    }
                 }
                 Event::Workspace(result) => {
                     self.picking_workspace = false;
@@ -786,9 +1059,20 @@ impl ForgeDesk {
                     match result {
                         Ok(Some(path)) => {
                             self.status = format!("Opened {}", path.display());
-                            self.session.workspace = Some(path);
-                            self.session.new_chat();
-                            self.show_archived = false;
+                            let repairing = self.session.active().is_some_and(|chat| {
+                                chat.workspace
+                                    .as_ref()
+                                    .is_some_and(|folder| !folder.is_dir())
+                            });
+                            self.session.workspace = Some(path.clone());
+                            if repairing {
+                                if let Some(chat) = self.session.active_mut() {
+                                    chat.set_workspace(Some(path));
+                                }
+                                self.attachment_error = None;
+                            } else {
+                                self.new_chat();
+                            }
                         }
                         Ok(None) => {}
                         Err(error) => self.status = error,
@@ -809,6 +1093,10 @@ fn read_attachments(paths: Vec<PathBuf>) -> Result<Vec<Attachment>, String> {
 }
 
 impl eframe::App for ForgeDesk {
+    fn raw_input_hook(&mut self, context: &egui::Context, input: &mut egui::RawInput) {
+        self.handle_clipboard_input(context, input);
+    }
+
     fn update(&mut self, context: &egui::Context, _frame: &mut eframe::Frame) {
         self.receive_events(context);
         let dropped = context.input(|input| {
@@ -848,8 +1136,7 @@ impl eframe::App for ForgeDesk {
         if !self.startup.is_active()
             && context.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::N))
         {
-            self.session.new_chat();
-            self.show_archived = false;
+            self.new_chat();
         }
 
         if !self.startup.is_active()

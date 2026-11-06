@@ -6,6 +6,8 @@ use crate::codex::{self, Approval, ChatRequest, ProviderEvent};
 use crate::domain::{MessageStatus, RunId, Session};
 
 pub enum Update {
+    Delegation(crate::delegation::Event),
+    Metrics(crate::ollama::Stats),
     Content(String),
     Complete,
     Failed(String),
@@ -25,12 +27,19 @@ pub struct Running {
     cancel: watch::Sender<bool>,
 }
 
+pub enum Request {
+    Codex {
+        request: ChatRequest,
+        executable: String,
+    },
+    Ollama(crate::ollama::Request),
+}
+
 impl Running {
     pub fn start(
         runtime: &tokio::runtime::Runtime,
         id: RunId,
-        request: ChatRequest,
-        executable: String,
+        request: Request,
         sender: mpsc::Sender<RunEvent>,
         context: egui::Context,
     ) -> Self {
@@ -38,11 +47,24 @@ impl Running {
         let task = runtime.spawn(async move {
             let (provider_sender, mut provider_receiver) = mpsc::channel(128);
             let producer = tokio::spawn(async move {
-                codex::stream_chat(&executable, request, provider_sender, cancellation).await
+                match request {
+                    Request::Codex {
+                        request,
+                        executable,
+                    } => {
+                        codex::stream_chat(&executable, request, provider_sender, cancellation)
+                            .await
+                    }
+                    Request::Ollama(request) => {
+                        crate::ollama::stream_chat(request, provider_sender, cancellation).await
+                    }
+                }
             });
 
             while let Some(event) = provider_receiver.recv().await {
                 let update = match event {
+                    ProviderEvent::Delegation(event) => Update::Delegation(event),
+                    ProviderEvent::Metrics(stats) => Update::Metrics(stats),
                     ProviderEvent::Thread(thread) => Update::Thread(thread),
                     ProviderEvent::Content(text) => Update::Content(text),
                     ProviderEvent::Status(text) => Update::Status(text),
@@ -59,7 +81,7 @@ impl Running {
 
             let result = producer
                 .await
-                .unwrap_or_else(|error| Err(format!("Codex worker stopped: {error}")));
+                .unwrap_or_else(|error| Err(format!("Assistant worker stopped: {error}")));
 
             let update = match result {
                 Ok(()) => Update::Complete,
@@ -93,13 +115,38 @@ pub fn apply_event(session: &mut Session, active: Option<RunId>, event: RunEvent
     }
 
     match event.update {
+        Update::Delegation(update) => {
+            if let Some(chat) = session
+                .chats
+                .iter_mut()
+                .find(|chat| chat.id == event.run.chat)
+            {
+                crate::delegation::apply(&mut chat.delegated_tasks, update);
+            }
+            false
+        }
+        Update::Metrics(stats) => {
+            if let Some(chat) = session
+                .chats
+                .iter_mut()
+                .find(|chat| chat.id == event.run.chat)
+            {
+                chat.ollama_usage.record(stats);
+            }
+            false
+        }
         Update::Thread(thread) => {
+            let desktop = session.desktop.enabled && crate::desktop::SUPPORTED;
+            let delegation = session.ollama.codex_delegation
+                && !session.ollama.preferred_model.trim().is_empty();
             if let Some(chat) = session
                 .chats
                 .iter_mut()
                 .find(|chat| chat.id == event.run.chat)
             {
                 chat.thread_id = Some(thread);
+                chat.desktop_tools = desktop;
+                chat.delegation_tools = delegation;
             }
             false
         }

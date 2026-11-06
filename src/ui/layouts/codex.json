@@ -2,5 +2,31 @@
   "name": "Codex",
   "layout": "codex",
   "heading": "What can I help with?",
-  "placeholder": "Ask anything"
+  "placeholder": "Ask anything",
+  "palette_guide": {
+    "how_to_edit": "Change the #RRGGBB values in palette below. These descriptions are notes, not color values. Reopen the app or select UI > Reload current UI after saving.",
+    "saved_settings": "Appearance > Text colors can override text and menu_text. Click Restore text colors there to use this JSON's values again.",
+    "background": "Main chat/page background.",
+    "sidebar": "Project/chat sidebar and settings window background.",
+    "rail": "Top bar behind File/Edit/View/Help and the left navigation rail.",
+    "surface": "Composer, popup surfaces, and many hover backgrounds.",
+    "input_background": "Text box background in Codex and Gemini. Separate from other surfaces.",
+    "text": "GENERAL TEXT: main labels, conversation text, headings, and chat titles. Keep this bright for readability.",
+    "menu_text": "TOP ROW TEXT: File, Edit, View, Help, and the UI selector. Independent of general text; gray matches the original app.",
+    "muted": "Secondary text, descriptions, placeholder labels, and many idle icons. Independent of the top row text.",
+    "border": "Theme borders and divider lines.",
+    "accent": "Theme accent for highlighted controls, such as the interface scale slider."
+  },
+  "palette": {
+    "background": "#181818",
+    "sidebar": "#202020",
+    "rail": "#202020",
+    "surface": "#202124",
+    "input_background": "#363636",
+    "text": "#ffffff",
+    "menu_text": "#8f8f8f",
+    "muted": "#919191",
+    "border": "#202020",
+    "accent": "#4d75b6"
+  }
 }

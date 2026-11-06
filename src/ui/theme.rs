@@ -1,12 +1,14 @@
 use eframe::egui;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Palette {
     pub background: egui::Color32,
     pub sidebar: egui::Color32,
     pub rail: egui::Color32,
     pub surface: egui::Color32,
+    pub input_background: egui::Color32,
     pub text: egui::Color32,
+    pub menu_text: egui::Color32,
     pub muted: egui::Color32,
     pub border: egui::Color32,
     pub blue: egui::Color32,
@@ -18,11 +20,36 @@ impl Default for Palette {
             sidebar: egui::Color32::from_rgb(27, 27, 27),
             rail: egui::Color32::from_rgb(33, 33, 33),
             surface: egui::Color32::from_rgb(48, 48, 48),
+            input_background: egui::Color32::from_rgb(48, 48, 48),
             text: egui::Color32::from_rgb(235, 235, 235),
+            menu_text: egui::Color32::from_rgb(128, 128, 128),
             muted: egui::Color32::from_rgb(145, 145, 145),
             border: egui::Color32::from_rgb(48, 48, 48),
             blue: egui::Color32::from_rgb(45, 105, 202),
         }
+    }
+}
+
+#[derive(Clone, Default, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct TextColors {
+    pub input_background: Option<[u8; 3]>,
+    pub menu: Option<[u8; 3]>,
+    pub general: Option<[u8; 3]>,
+}
+
+impl TextColors {
+    pub fn apply(&self, mut palette: Palette) -> Palette {
+        if let Some([r, g, b]) = self.input_background {
+            palette.input_background = egui::Color32::from_rgb(r, g, b);
+        }
+        if let Some([r, g, b]) = self.menu {
+            palette.menu_text = egui::Color32::from_rgb(r, g, b);
+        }
+        if let Some([r, g, b]) = self.general {
+            palette.text = egui::Color32::from_rgb(r, g, b);
+        }
+        palette
     }
 }
 thread_local! { static PALETTE: std::cell::Cell<Palette> = std::cell::Cell::new(Palette::default()); }
@@ -41,8 +68,25 @@ pub fn rail() -> egui::Color32 {
 pub fn surface() -> egui::Color32 {
     PALETTE.get().surface
 }
+pub fn input_background() -> egui::Color32 {
+    PALETTE.get().input_background
+}
 pub fn text() -> egui::Color32 {
     PALETTE.get().text
+}
+pub fn menu_text() -> egui::Color32 {
+    PALETTE.get().menu_text
+}
+
+pub fn update_colors(ctx: &egui::Context, palette: Palette) {
+    if PALETTE.get() == palette {
+        return;
+    }
+    set_palette(palette);
+    ctx.style_mut(|style| {
+        style.visuals.override_text_color = Some(palette.text);
+    });
+    ctx.request_repaint();
 }
 pub fn muted() -> egui::Color32 {
     PALETTE.get().muted
@@ -143,3 +187,7 @@ pub fn apply(ctx: &egui::Context) {
         style.spacing.scroll.floating = true;
     });
 }
+
+#[cfg(test)]
+#[path = "../../tests/ui/text_colors.rs"]
+mod text_color_tests;

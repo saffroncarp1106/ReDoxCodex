@@ -1,10 +1,9 @@
 use eframe::egui::{
     self, Align, Color32, FontId, Frame, Layout, Margin, Rect, RichText, pos2, vec2,
 };
-use forgedesk::domain::{DEFAULT_MODEL, Mode};
+use forgedesk::domain::Mode;
 
 use super::{
-    controls::model_label,
     icons::{self, Icon},
     packs, theme,
 };
@@ -31,11 +30,15 @@ impl ForgeDesk {
                     (Icon::Clock, "Archived chats"),
                     (Icon::Shield, "Workspace access"),
                 ] {
-                    if icons::button(ui, icon, label).clicked() {
+                    let enabled = !matches!(icon, Icon::NewChat) || self.can_new_chat();
+                    if ui
+                        .add_enabled_ui(enabled, |ui| icons::button(ui, icon, label))
+                        .inner
+                        .clicked()
+                    {
                         match icon {
                             Icon::NewChat => {
-                                self.session.new_chat();
-                                self.show_archived = false;
+                                self.new_chat();
                             }
                             Icon::Search => {
                                 self.sidebar_visible = true;
@@ -190,7 +193,7 @@ impl ForgeDesk {
             }
         }
         Frame::new()
-            .fill(theme::surface())
+            .fill(theme::input_background())
             .corner_radius(36)
             .inner_margin(Margin::symmetric(16, 6))
             .show(ui, |ui| {
@@ -219,6 +222,14 @@ impl ForgeDesk {
                                         egui::Modifiers::SHIFT,
                                         egui::Key::Enter,
                                     )),
+                            );
+                            self.prompt_input_id = Some(response.id);
+                            super::controls::focus_new_prompt(
+                                &response,
+                                &mut self.focus_prompt,
+                                !self.startup.is_active()
+                                    && !self.settings_open
+                                    && !self.rename_open,
                             );
                             if response.has_focus()
                                 && context.input(|input| {
@@ -255,13 +266,12 @@ impl ForgeDesk {
                 });
             });
         ui.add_space(12.0);
-        ui.horizontal(|ui| {
+        centered_controls(ui, "gemini_chat_mode", |ui| {
             let empty = self
                 .session
                 .active()
                 .is_none_or(|chat| chat.messages.is_empty());
             if empty {
-                ui.add_space((ui.available_width() * 0.5 - 68.0).max(0.0));
                 if let Some(chat) = self.session.active_mut() {
                     ui.add_enabled_ui(self.running.is_none(), |ui| {
                         if ui
@@ -283,25 +293,8 @@ impl ForgeDesk {
             }
         });
         ui.add_space(5.0);
-        ui.horizontal_wrapped(|ui| {
-            egui::ComboBox::from_id_salt("gemini_model")
-                .width(145.0)
-                .selected_text(model_label(&self.session.model))
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(
-                        &mut self.session.model,
-                        DEFAULT_MODEL.into(),
-                        DEFAULT_MODEL,
-                    );
-                    for model in &self.models {
-                        ui.selectable_value(
-                            &mut self.session.model,
-                            model.clone(),
-                            model_label(model),
-                        );
-                    }
-                });
-            self.effort_picker(ui, "gemini_effort");
+        centered_controls(ui, "gemini_chat_options", |ui| {
+            self.model_effort_picker(ui, "gemini_model_effort");
             if let Some(chat) = self.session.active_mut() {
                 let mut mode = chat.mode;
                 ui.add_enabled_ui(self.running.is_none(), |ui| {
@@ -317,9 +310,13 @@ impl ForgeDesk {
                 chat.set_mode(mode);
             }
             ui.label(
-                RichText::new("Codex · ChatGPT")
-                    .size(11.0)
-                    .color(theme::muted()),
+                RichText::new(if self.is_ollama() {
+                    "Ollama · Local agent"
+                } else {
+                    "Codex · ChatGPT"
+                })
+                .size(11.0)
+                .color(theme::muted()),
             );
         });
         if let Some(error) = &self.attachment_error {
@@ -328,13 +325,37 @@ impl ForgeDesk {
         if self.picking_files {
             ui.label("Loading files…");
         }
-        if self.running.is_some() || (self.models.is_empty() && !self.refreshing) {
+        if self.running.is_some()
+            || (!self.is_ollama() && self.models.is_empty() && !self.refreshing)
+        {
             ui.label(RichText::new(&self.status).small().color(theme::muted()));
         }
         if send {
             self.send_prompt(context);
         }
     }
+}
+
+fn centered_controls(ui: &mut egui::Ui, salt: &str, contents: impl FnOnce(&mut egui::Ui)) {
+    let id = ui.make_persistent_id(salt);
+    let previous_width = ui
+        .ctx()
+        .data(|data| data.get_temp::<f32>(id))
+        .unwrap_or(0.0);
+    let spacing = ui.spacing().item_spacing.x;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        ui.add_space(((ui.available_width() - previous_width) * 0.5).max(0.0));
+        let row = ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = spacing;
+            contents(ui);
+        });
+        let width = row.response.rect.width();
+        if (previous_width - width).abs() > 0.5 {
+            ui.ctx().data_mut(|data| data.insert_temp(id, width));
+            ui.ctx().request_discard("Center composer controls");
+        }
+    });
 }
 
 fn paint_glow(painter: &egui::Painter, rect: Rect, config: &packs::Config) {
@@ -355,3 +376,7 @@ fn paint_glow(painter: &egui::Painter, rect: Rect, config: &packs::Config) {
     }
     painter.add(egui::Shape::mesh(mesh));
 }
+
+#[cfg(test)]
+#[path = "../../tests/ui/composer_alignment.rs"]
+mod alignment_tests;

@@ -37,6 +37,9 @@ impl ForgeDesk {
         };
         self.capture_frames += 1;
         if self.capture_frames == 1 {
+            if std::env::args().any(|arg| arg == "--agents") {
+                self.ui_preferences.agents_open = true;
+            }
             if std::env::args().any(|arg| arg == "--format-preview") {
                 self.session.new_chat();
                 if let Some(chat) = self.session.active_mut() {
@@ -119,6 +122,7 @@ impl ForgeDesk {
         }
         if self.capture_frames == 4
             && (self.refreshing
+                || self.ollama_connecting
                 || self.history_loading
                 || self.history_reading.is_some()
                 || (self.startup.is_active()

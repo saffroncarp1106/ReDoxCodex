@@ -176,6 +176,7 @@ pub fn parse_turns(page: &Value, model: &str) -> Result<Vec<Message>, String> {
 }
 
 pub fn import(session: &mut Session, page: ConversationPage, older: bool) -> Uuid {
+    let locally_archived = session.local_archive_overrides.get(&page.entry.id).copied();
     let index = session
         .chats
         .iter()
@@ -197,7 +198,7 @@ pub fn import(session: &mut Session, page: ConversationPage, older: bool) -> Uui
             chat.title = "Codex conversation".into();
         }
         chat.workspace = Some(page.entry.cwd);
-        chat.archived = page.archived;
+        chat.archived = locally_archived.unwrap_or(page.archived);
         chat.messages = page.messages;
     }
     chat.id

@@ -1,11 +1,10 @@
-use super::controls::model_label;
 use super::icons::{self, Icon};
-use super::theme::{self, background, muted, surface, text};
+use super::theme::{self, background, muted, text};
 use crate::app::ForgeDesk;
 use eframe::egui::{
     self, Align, Color32, FontId, Frame, Layout, Margin, RichText, Sense, Stroke, vec2,
 };
-use forgedesk::domain::{DEFAULT_MODEL, Message, MessageStatus, Mode, Role};
+use forgedesk::domain::{Message, MessageStatus, Mode, Role};
 
 impl ForgeDesk {
     pub(in crate::app) fn conversation(&mut self, context: &egui::Context) {
@@ -19,6 +18,9 @@ impl ForgeDesk {
             )
             .show(context, |ui| {
                 ui.horizontal(|ui| {
+                    if icons::button(ui, Icon::Panel, "Toggle sidebar").clicked() {
+                        self.sidebar_visible = !self.sidebar_visible;
+                    }
                     let (rect, _) = ui.allocate_exact_size(vec2(18.0, 22.0), Sense::hover());
                     icons::paint(ui.painter(), rect.shrink(2.0), Icon::Folder, text());
                     ui.add_space(6.0);
@@ -37,26 +39,25 @@ impl ForgeDesk {
                         },
                     );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if icons::button(ui, Icon::Panel, "Toggle sidebar").clicked() {
-                            self.sidebar_visible = !self.sidebar_visible;
-                        }
-                        if icons::button(ui, Icon::Sliders, "Chat settings").clicked() {
-                            self.settings_open = true;
+                        if icons::button(ui, Icon::Agent, "Toggle Ollama agents").clicked() {
+                            self.ui_preferences.agents_open = !self.ui_preferences.agents_open;
+                            context.request_repaint();
                         }
                         ui.menu_button("···", |ui| {
                             if ui.button("Rename chat").clicked() {
                                 self.rename_open = true;
                                 ui.close();
                             }
-                            if let Some(chat) = self.session.active_mut() {
+                            if let Some(chat) = self.session.active() {
+                                let id = chat.id;
+                                let archived = chat.archived;
                                 let label = if chat.archived {
                                     "Restore chat"
                                 } else {
                                     "Archive chat"
                                 };
                                 if ui.button(label).clicked() {
-                                    chat.archived = !chat.archived;
-                                    self.show_archived = chat.archived;
+                                    self.archive_local_chat(id, !archived);
                                     ui.close();
                                 }
                             }
@@ -135,7 +136,7 @@ impl ForgeDesk {
             }))
             .show(context, |ui| {
                 Frame::new()
-                    .fill(surface())
+                    .fill(theme::input_background())
                     .stroke(Stroke::new(1.0_f32, Color32::from_gray(59)))
                     .corner_radius(20)
                     .inner_margin(Margin::symmetric(12, 6))
@@ -194,6 +195,14 @@ impl ForgeDesk {
                                             egui::Key::Enter,
                                         )),
                                 );
+                                self.prompt_input_id = Some(response.id);
+                                super::controls::focus_new_prompt(
+                                    &response,
+                                    &mut self.focus_prompt,
+                                    !self.startup.is_active()
+                                        && !self.settings_open
+                                        && !self.rename_open,
+                                );
                                 if response.has_focus()
                                     && context.input(|input| {
                                         input.key_pressed(egui::Key::Enter)
@@ -210,6 +219,8 @@ impl ForgeDesk {
                         }
                         ui.add_space(6.0);
                         ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 3.0;
+                            ui.spacing_mut().button_padding.x = 5.0;
                             ui.menu_button(RichText::new("+").size(23.0), |ui| {
                                 if ui
                                     .add_enabled(
@@ -228,10 +239,10 @@ impl ForgeDesk {
                             });
                             if let Some(chat) = self.session.active_mut() {
                                 let editable = self.running.is_none();
-                                let color = if chat.mode != Mode::Chat {
+                                let color = if chat.mode == Mode::FullAccess {
                                     Color32::from_rgb(231, 120, 49)
                                 } else {
-                                    muted()
+                                    text()
                                 };
                                 let (rect, _) =
                                     ui.allocate_exact_size(vec2(15.0, 18.0), Sense::hover());
@@ -312,25 +323,7 @@ impl ForgeDesk {
                                         "Voice input is not available yet",
                                     );
                                 });
-                                self.effort_picker(ui, "composer_effort");
-                                egui::ComboBox::from_id_salt("composer_model")
-                                    .selected_text(
-                                        RichText::new(model_label(&self.session.model)).size(12.0),
-                                    )
-                                    .show_ui(ui, |ui| {
-                                        ui.selectable_value(
-                                            &mut self.session.model,
-                                            DEFAULT_MODEL.into(),
-                                            DEFAULT_MODEL,
-                                        );
-                                        for model in &self.models {
-                                            ui.selectable_value(
-                                                &mut self.session.model,
-                                                model.clone(),
-                                                model_label(model),
-                                            );
-                                        }
-                                    });
+                                self.model_effort_picker(ui, "composer_model_effort");
                             });
                         });
                     });
@@ -340,7 +333,11 @@ impl ForgeDesk {
                             .truncate(),
                     );
                 }
-                if self.models.is_empty() && !self.refreshing && !self.status.starts_with("Ready") {
+                if !self.is_ollama()
+                    && self.models.is_empty()
+                    && !self.refreshing
+                    && !self.status.starts_with("Ready")
+                {
                     ui.label(
                         RichText::new(&self.status)
                             .size(12.0)
@@ -395,6 +392,9 @@ pub(super) fn render_message(
             ui.label(RichText::new("Working...").color(muted()));
         });
     } else {
+        if message.model.starts_with("Ollama ·") {
+            ui.label(RichText::new(&message.model).small().color(muted()));
+        }
         ui.push_id(message.id, |ui| {
             super::markdown::show_in_workspace(ui, &message.content, workspace)
         });

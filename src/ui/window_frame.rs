@@ -2,6 +2,47 @@ use eframe::egui::{self, CursorIcon, Pos2, Rect, ResizeDirection};
 
 use crate::app::ForgeDesk;
 
+pub(super) fn native_popup(
+    context: &egui::Context,
+    id: &'static str,
+    title: &'static str,
+    size: egui::Vec2,
+    open: &mut bool,
+    mut contents: impl FnMut(&mut egui::Ui),
+) {
+    if !*open {
+        return;
+    }
+    context.show_viewport_immediate(
+        egui::ViewportId::from_hash_of(id),
+        egui::ViewportBuilder::default()
+            .with_title(title)
+            .with_inner_size(size)
+            .with_min_inner_size([280.0, 160.0])
+            .with_decorations(true)
+            .with_resizable(true),
+        |child, class| {
+            if class == egui::ViewportClass::Embedded {
+                egui::Window::new(title)
+                    .id(egui::Id::new(id))
+                    .open(open)
+                    .constrain(false)
+                    .default_size(size)
+                    .collapsible(false)
+                    .show(child, |ui| contents(ui));
+            } else {
+                if child.input(|input| input.viewport().close_requested()) {
+                    *open = false;
+                }
+                egui::CentralPanel::default().show(child, |ui| contents(ui));
+            }
+            if child.input(|input| !input.events.is_empty()) || !*open {
+                child.request_repaint_of(egui::ViewportId::ROOT);
+            }
+        },
+    );
+}
+
 pub(super) fn title_drag(context: &egui::Context, response: &egui::Response) {
     if response.drag_started() {
         context.send_viewport_cmd(egui::ViewportCommand::StartDrag);
