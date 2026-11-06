@@ -26,6 +26,11 @@ If a saved project folder was moved or renamed, sending a request opens Workspac
 
 macOS and Linux retain chat/project support; this desktop backend is Windows only. Tool integration follows the [Codex app-server dynamic tool protocol](https://learn.chatgpt.com/docs/app-server).
 
+## Future Goals
+
+Update to another Repo for custom UI's, with a detailed menu on how to make that
+To Do:
+
 ## Ollama agents
 
 Open the **Agents** tab on the right, connect to your Ollama server (default `http://127.0.0.1:11434`), and choose an installed model such as Qwen. **Use for this chat** hands the conversation to that model; **New agent chat** starts a separate local chat. **Switch this chat to Codex** returns to the account provider. New chats inherit the active provider and local model. The server, preferred model, agent instructions, per-chat provider, and token usage persist across restarts.
@@ -46,19 +51,7 @@ Both composers use a combined model/effort control. Click it to open a compact c
 
 The card is centered over its opening button, with a below-button fallback when needed. Clicking the model name expands a scrollable list inside the card; choosing a model collapses that list while keeping the effort card open.
 
-## Text colors
-
-Open **Settings → Appearance → Text colors** to adjust **Top row text** (File/Edit/View/Help and the UI selector) independently of **General text** (the main interface and conversations). Color pickers apply live and save separately for each layout. **Restore text colors** returns to the layout defaults. UI pack JSON can also set `palette.menu_text` separately from `palette.text`; existing packs without this field use the softer gray menu default.
-
-The complete adjustable Codex palette is explicit in `src/ui/layouts/codex.json`. Its `palette_guide` explains each key next to the editable `palette`. Change `menu_text` for the top row, `text` for general text, and `muted` for secondary text/icons. Saved Appearance choices override `text` and `menu_text`; use **Restore text colors** to return control to the JSON. Reopen the app or choose **UI → Reload current UI** after file edits.
-
-**Text box background** on the same Appearance page controls the input box independently of other surfaces in both layouts. Its JSON key is `palette.input_background`; packs without this key inherit `surface`. Appearance choices for this color are saved per layout too. The Codex header's robot button toggles the Ollama Agents panel, and the sidebar toggle sits to the left of the chat title. The access label and shield use orange only for Full access; Read only and Workspace access use general text.
-
 ## Cursor animation
-
-Open **Settings → Cursor animation** to add or edit names, select which names appear, choose a color palette, or customize individual colors. You can also adjust cursor count, size, duration, labels, trails, and guides, disable startup playback, or replay the animation. Choices are saved automatically for both layouts.
-
-Release defaults are embedded from `src/ui/startup.json`: four size-15 cursors, a 5.5-second animation, the names SaffronCarp1106 and SackBoy19, and purple/pale blue colors (`#8C69B8`, `#ABD3D8`). Personal changes persist in `%APPDATA%\ForgeDesk\data\app.ron` under `codex-rust.ui.v1`; they are not temporary cache. **Restore animation defaults** returns to the bundled release settings. Existing personal choices take priority over release defaults.
 
 Animation inspiration: [Swarm Rebuild by Dhvanil Patel](https://github.com/DhvanilPatel/swarm-cursors), which credits the [original Swarm animation by Joel Califa](https://califa.github.io/swarm-site/). This application uses a native Rust adaptation.
 
