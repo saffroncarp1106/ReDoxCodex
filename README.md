@@ -1,10 +1,12 @@
 # CodexRustReWrite
 A front-end rewrite for rust because 1.2g of ram for a basic ui window is ridiculous.
 
+Redox: A reaction where both reduction and oxidation occurs. The process of Oxidation, is the lose of an electron, the project was aimed to rewrite Codex to no longer use Electron and instead Rust, ironically when Iron oxidizes, it Rusts. Technically a redox reaction needs a reduction, which we have by reducing ram consumption by 10x, so use the free memory for an Ollama model!
 
 ## Run
+Run the application after building using the command below, and open `ReDoxCodex\target\debug\codex-rust.exe`
 
-Double-click `Launch Codex Rust.cmd` to build and open this copy. Rust and the Visual Studio C++ build tools are required.
+When making edits `Launch Codex Rust.cmd` to build and open this copy. Rust and the Visual Studio C++ build tools are required.
 
 On macOS or Linux, with Rust and the native platform build dependencies installed, build and run with `cargo run --locked --bin codex-rust`. The `.cmd` launcher is for Windows.
 
