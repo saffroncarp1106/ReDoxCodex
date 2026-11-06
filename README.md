@@ -45,12 +45,6 @@ The integration uses Ollama's native [model list](https://docs.ollama.com/api/ta
 
 If Ollama reports a CUDA/GPU initialization failure, enable **CPU only (GPU troubleshooting)** in Agents and retry. This sets `num_gpu: 0` for the request; CPU generation can be slower.
 
-## Model and effort
-
-Both composers use a combined model/effort control. Click it to open a compact card with the current effort, model selector, reset button, and stepped effort slider. Mouse and Left/Right keys select only levels supported by that model; choices remain saved per model. Reset restores the server's model default. Ollama chats show the local model selector without Codex reasoning levels.
-
-The card is centered over its opening button, with a below-button fallback when needed. Clicking the model name expands a scrollable list inside the card; choosing a model collapses that list while keeping the effort card open.
-
 ## Cursor animation
 
 Animation inspiration: [Swarm Rebuild by Dhvanil Patel](https://github.com/DhvanilPatel/swarm-cursors), which credits the [original Swarm animation by Joel Califa](https://califa.github.io/swarm-site/). This application uses a native Rust adaptation.
@@ -73,9 +67,3 @@ cargo clippy --all-targets -- -D warnings
 cargo build --locked
 ```
 
-
-## v0.1.1 missing-file repair
-
-The formatting preview is now bundled at `src/ui/previews/formatting.md`. Normal app builds no longer depend on a file under `tests/`. The referenced UI regression tests are included in `tests/ui/`; include that folder when distributing source for `cargo test` or `cargo fmt`.
-
-Build with `cargo build --locked`, or double-click `Launch Codex Rust.cmd`. The source archive must include `src/`, `tests/`, `docs/`, `Cargo.toml`, `Cargo.lock`, `rustfmt.toml`, and the launcher. Generated `target/` and `temp/` directories are unnecessary for a source download.
