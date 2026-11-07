@@ -214,7 +214,7 @@ pub async fn execute(
     if action.changes_desktop() && settings.confirm_actions && !*approved {
         let (response, decision) = oneshot::channel();
         sender.send(ProviderEvent::Approval(Approval {
-            description: "Allow Codex to control your mouse and keyboard for this response? Screenshots and input can reach applications outside the project. Review the request in the chat. Stop cancels further desktop actions. This approval lasts for this response only.".into(), response,
+            description: "Allow the selected agent to control your mouse and keyboard for this response? Screenshots and input can reach applications outside the project. Review the request in the chat. Stop cancels further desktop actions. This approval lasts for this response only.".into(), response,
         })).await.map_err(|_| "Chat closed.")?;
         let accepted = tokio::select! { answer = decision => answer.unwrap_or(false), _ = cancel.changed() => false };
         if !accepted {

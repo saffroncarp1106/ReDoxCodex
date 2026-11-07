@@ -454,10 +454,9 @@ impl ReDox {
         };
 
         let request = if chat.provider == Provider::Ollama {
-            run::Request::Ollama(ollama::Request::from_chat(
-                chat,
-                self.session.ollama.clone(),
-            ))
+            let mut request = ollama::Request::from_chat(chat, self.session.ollama.clone());
+            request.desktop = self.session.desktop.clone();
+            run::Request::Ollama(request)
         } else {
             let mut request = ChatRequest::from_chat(chat, self.effective_model().to_owned());
             request.desktop = self.session.desktop.clone();
@@ -474,12 +473,10 @@ impl ReDox {
         };
 
         if let Some(runtime) = &self.runtime {
-            if let run::Request::Codex { request, .. } = &request
-                && request.desktop.enabled
-                && redox::desktop::SUPPORTED
-            {
+            let (desktop, activity) = request.desktop();
+            if desktop.enabled && redox::desktop::SUPPORTED {
                 self.desktop_overlay = Some(ui::desktop_overlay::Overlay::start(
-                    request.desktop_activity.clone(),
+                    activity.clone(),
                     self.startup.desktop_style(),
                 ));
             }

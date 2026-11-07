@@ -39,6 +39,15 @@ pub enum Request {
     Ollama(crate::ollama::Request),
 }
 
+impl Request {
+    pub fn desktop(&self) -> (&crate::desktop::Settings, &crate::desktop::Activity) {
+        match self {
+            Self::Codex { request, .. } => (&request.desktop, &request.desktop_activity),
+            Self::Ollama(request) => (&request.desktop, &request.desktop_activity),
+        }
+    }
+}
+
 impl Running {
     pub fn start(
         runtime: &tokio::runtime::Runtime,
@@ -49,10 +58,7 @@ impl Running {
     ) -> Self {
         let (cancel, cancellation) = watch::channel(false);
         let (feedback, feedback_receiver) = mpsc::unbounded_channel();
-        let desktop_activity = match &request {
-            Request::Codex { request, .. } => request.desktop_activity.clone(),
-            Request::Ollama(_) => crate::desktop::Activity::default(),
-        };
+        let desktop_activity = request.desktop().1.clone();
         let activity = desktop_activity.clone();
         let stop = cancel.clone();
         let task = runtime.spawn(async move {

@@ -327,7 +327,7 @@ impl ReDox {
         ui.add_enabled_ui(redox::desktop::SUPPORTED && self.running.is_none(), |ui| {
             ui.checkbox(
                 &mut self.session.desktop.enabled,
-                "Allow Codex to see and control this desktop",
+                "Allow the selected agent to see and control this desktop",
             );
             ui.add_enabled_ui(self.session.desktop.enabled, |ui| {
                 ui.checkbox(
@@ -337,7 +337,7 @@ impl ReDox {
             });
         });
         ui.label(RichText::new(if redox::desktop::SUPPORTED {
-            "Codex can capture the screens, list and focus windows, click, scroll, drag, type, and press keys in other apps. Screenshots are sent to the selected Codex model. Use Stop to cancel, or hold Escape to block desktop actions. This setting is separate from project file access and applies on the next response. Local Ollama agents do not receive desktop tools."
+            "Codex and Ollama can capture screens, focus windows, and use the mouse and keyboard. Ollama requires a model with both vision and tool calling. Screenshots go to the selected provider, including the configured Ollama server. Use Stop to cancel, or hold Escape to block desktop actions. This setting is separate from project file access and applies on the next response."
         } else {
             "Native desktop control currently supports Windows. Other platforms retain their existing chat and project features."
         }).small().color(muted()));

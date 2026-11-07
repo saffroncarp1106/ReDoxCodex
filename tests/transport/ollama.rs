@@ -68,6 +68,8 @@ fn request(endpoint: String, tools: bool) -> Request {
         model: chat.ollama_model,
         workspace: None,
         mode: Mode::Chat,
+        desktop: Default::default(),
+        desktop_activity: Default::default(),
         messages: vec![InputMessage {
             role: "user",
             content: "Hello".into(),
@@ -189,6 +191,66 @@ async fn disconnected_streams_fail_and_pre_cancelled_requests_do_not_connect() {
         .unwrap_err(),
         "Cancelled."
     );
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn folderless_ollama_desktop_input_uses_shared_approval() {
+    let call = json!({"message":{"role":"assistant","tool_calls":[{
+        "function":{"name":"desktop_control","arguments":{"action":"keypress","keys":["ESC"]}}
+    }]},"done":true});
+    let reply = json!({"message":{"content":"Desktop input was declined."},"done":true});
+    let (endpoint, captured, handle) = server(vec![
+        (
+            "/api/show",
+            json!({"capabilities":["vision","tools"]}).to_string(),
+        ),
+        ("/api/chat", format!("{call}\n")),
+        ("/api/chat", format!("{reply}\n")),
+    ]);
+    let mut request = request(endpoint, false);
+    request.desktop.enabled = true;
+    let activity = request.desktop_activity.clone();
+    let (sender, mut events) = mpsc::channel(16);
+    let (_cancel, receiver) = watch::channel(false);
+    let worker = tokio::spawn(stream_chat(request, sender, receiver));
+    while let Some(event) = events.recv().await {
+        if let ProviderEvent::Approval(approval) = event {
+            approval.response.send(false).unwrap();
+        }
+    }
+    worker.await.unwrap().unwrap();
+    handle.join().unwrap();
+    let requests = captured.lock().unwrap();
+    let tools = requests[1].1["tools"].as_array().unwrap();
+    assert_eq!(tools.len(), 1);
+    assert_eq!(tools[0]["function"]["name"], "desktop_control");
+    assert!(
+        requests[2].1["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|message| {
+                message["role"] == "tool"
+                    && message["content"]
+                        .as_str()
+                        .unwrap()
+                        .contains("not approved")
+            })
+    );
+    assert!(!activity.snapshot().active);
+}
+
+#[test]
+fn desktop_screenshot_is_an_ollama_tool_message_with_an_image() {
+    let message = desktop_tool_message(Ok(vec![
+        json!({"type":"inputText","text":"Origin (-1920, 0)"}),
+        json!({"type":"inputImage","imageUrl":"data:image/jpeg;base64,YWJj"}),
+    ]));
+    assert_eq!(message["role"], "tool");
+    assert_eq!(message["tool_name"], "desktop_control");
+    assert_eq!(message["content"], "Origin (-1920, 0)");
+    assert_eq!(message["images"], json!(["YWJj"]));
 }
 
 #[test]
