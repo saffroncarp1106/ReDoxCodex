@@ -1,7 +1,7 @@
 use super::theme;
-use crate::app::ForgeDesk;
-use eframe::egui::{self, Align, Layout, RichText, Sense, pos2, vec2};
-use forgedesk::domain::DEFAULT_MODEL;
+use crate::app::ReDox;
+use eframe::egui::{self, Align2, FontId, RichText, Sense, pos2, vec2};
+use redox::domain::DEFAULT_MODEL;
 
 pub(super) fn focus_new_prompt(response: &egui::Response, pending: &mut bool, allowed: bool) {
     if *pending && allowed {
@@ -10,7 +10,7 @@ pub(super) fn focus_new_prompt(response: &egui::Response, pending: &mut bool, al
     }
 }
 
-impl ForgeDesk {
+impl ReDox {
     pub(in crate::app) fn model_effort_picker(&mut self, ui: &mut egui::Ui, id: &str) {
         let local = self.is_ollama();
         let model = self.selected_model_info().cloned();
@@ -38,15 +38,13 @@ impl ForgeDesk {
             ui.add_enabled_ui(self.running.is_none(), |ui| {
                 ui.scope(|ui| {
                     ui.style_mut().visuals.menu_corner_radius = egui::CornerRadius::same(18);
-                    let button = ui.button(RichText::new(format!("{name} · {label}")).size(12.0));
+                    let button = effort_button(ui, &format!("{name} · {label}"));
                     if self.capture_path.is_some()
                         && std::env::args().any(|arg| arg == "--effort-preview")
                     {
                         egui::Popup::open_id(ui.ctx(), egui::Popup::default_response_id(&button));
                     }
-                    egui::Popup::menu(&button)
-                        .align(egui::emath::RectAlign::TOP)
-                        .align_alternatives(&[egui::emath::RectAlign::BOTTOM])
+                    let panel = model_effort_popup(&button)
                         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
                         .frame(
                             egui::Frame::popup(ui.style())
@@ -57,43 +55,11 @@ impl ForgeDesk {
                             ui.set_width(230.0);
                             ui.spacing_mut().item_spacing = vec2(6.0, 4.0);
                             ui.add_space(2.0);
-                            ui.horizontal(|ui| {
-                                ui.allocate_ui_with_layout(
-                                    vec2(22.0, 24.0),
-                                    Layout::left_to_right(Align::Center),
-                                    |ui| {
-                                        let (rect, _) = ui
-                                            .allocate_exact_size(vec2(16.0, 18.0), Sense::hover());
-                                        super::icons::paint(
-                                            ui.painter(),
-                                            rect,
-                                            super::icons::Icon::Bolt,
-                                            theme::muted(),
-                                        );
-                                    },
-                                );
-                                ui.allocate_ui_with_layout(
-                                    vec2(ui.available_width() - 32.0, 24.0),
-                                    Layout::top_down(Align::Center),
-                                    |ui| {
-                                        ui.label(
-                                            RichText::new(&label)
-                                                .size(14.0)
-                                                .strong()
-                                                .color(theme::blue()),
-                                        );
-                                    },
-                                );
-                                let can_reset = !local && choice.is_some();
-                                if ui
-                                    .add_enabled(can_reset, egui::Button::new("↺").frame(false))
-                                    .on_hover_text("Restore this model's default effort")
-                                    .clicked()
-                                    && let Some(model) = &model
-                                {
-                                    self.session.model_efforts.remove(&model.model);
-                                }
-                            });
+                            if effort_header(ui, &label, !local && choice.is_some()).clicked()
+                                && let Some(model) = &model
+                            {
+                                self.session.model_efforts.remove(&model.model);
+                            }
                             self.chat_model_picker(ui, "popover_model");
                             ui.add_space(3.0);
                             if !local {
@@ -128,7 +94,13 @@ impl ForgeDesk {
                                 }
                             }
                             ui.add_space(2.0);
+                            ui.is_sizing_pass()
                         });
+                    if let Some(panel) = panel
+                        && !panel.inner
+                    {
+                        remember_effort_position(&button, panel.response.rect.min);
+                    }
                 });
             });
         });
@@ -199,6 +171,76 @@ impl ForgeDesk {
     }
 }
 
+fn effort_button(ui: &mut egui::Ui, summary: &str) -> egui::Response {
+    let state = ui.make_persistent_id("effort_button_popup");
+    let popup = ui.ctx().data(|data| data.get_temp::<egui::Id>(state));
+    let open = popup.is_some_and(|id| egui::Popup::is_id_open(ui.ctx(), id));
+    let response = ui.add_sized(
+        [168.0, 28.0],
+        egui::Button::new(RichText::new(if open { "Select effort" } else { summary }).size(12.0))
+            .truncate(),
+    );
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(state, egui::Popup::default_response_id(&response)));
+    response
+}
+
+fn effort_header(ui: &mut egui::Ui, label: &str, can_reset: bool) -> egui::Response {
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::hover());
+    ui.painter().text(
+        rect.center(),
+        Align2::CENTER_CENTER,
+        label,
+        FontId::proportional(14.0),
+        theme::blue(),
+    );
+    let bolt =
+        egui::Rect::from_center_size(pos2(rect.left() + 10.0, rect.center().y), vec2(16.0, 18.0));
+    super::icons::paint(ui.painter(), bolt, super::icons::Icon::Bolt, theme::muted());
+    let reset =
+        egui::Rect::from_center_size(pos2(rect.right() - 12.0, rect.center().y), vec2(24.0, 24.0));
+    ui.scope(|ui| {
+        if !can_reset {
+            ui.disable();
+        }
+        ui.put(reset, egui::Button::new("↺").frame(false))
+    })
+    .inner
+    .on_hover_text("Restore this model's default effort")
+}
+
+fn model_effort_popup(button: &egui::Response) -> egui::Popup<'_> {
+    let key = button.id.with("effort_panel_position");
+    let open = egui::Popup::is_id_open(&button.ctx, egui::Popup::default_response_id(button));
+    let position = button.ctx.data_mut(|data| {
+        if open {
+            data.get_temp::<egui::Pos2>(key)
+        } else {
+            data.remove::<egui::Pos2>(key);
+            None
+        }
+    });
+    let popup = egui::Popup::menu(button);
+    if let Some(position) = position {
+        popup
+            .anchor(egui::PopupAnchor::Position(position))
+            .align(egui::emath::RectAlign::BOTTOM_START)
+            .align_alternatives(&[])
+            .gap(0.0)
+    } else {
+        popup
+            .align(egui::emath::RectAlign::TOP)
+            .align_alternatives(&[egui::emath::RectAlign::BOTTOM])
+            .gap(20.0)
+    }
+}
+
+fn remember_effort_position(button: &egui::Response, position: egui::Pos2) {
+    button.ctx.data_mut(|data| {
+        data.get_temp_mut_or_insert_with(button.id.with("effort_panel_position"), || position);
+    });
+}
+
 fn model_choices(
     ui: &mut egui::Ui,
     id: &str,
@@ -215,14 +257,14 @@ fn model_choices(
             .iter()
             .find(|(value, _)| value == current)
             .map_or_else(|| model_label(current), |(_, name)| name.clone());
-        let response = ui
-            .vertical_centered(|ui| {
-                ui.button(
-                    RichText::new(format!("{name} {}", if expanded { "−" } else { "+" }))
-                        .size(12.0),
-                )
-            })
-            .inner;
+        let response = ui.add_sized(
+            [ui.available_width(), 24.0],
+            egui::Button::new(
+                RichText::new(format!("{name} {}", if expanded { "−" } else { "+" })).size(12.0),
+            )
+            .frame(false)
+            .truncate(),
+        );
         if response.clicked() {
             expanded = !expanded;
         }

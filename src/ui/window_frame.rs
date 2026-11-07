@@ -1,6 +1,8 @@
+use std::sync::{Arc, OnceLock};
+
 use eframe::egui::{self, CursorIcon, Pos2, Rect, ResizeDirection};
 
-use crate::app::ForgeDesk;
+use crate::app::ReDox;
 
 pub(super) fn native_popup(
     context: &egui::Context,
@@ -15,7 +17,7 @@ pub(super) fn native_popup(
     }
     context.show_viewport_immediate(
         egui::ViewportId::from_hash_of(id),
-        egui::ViewportBuilder::default()
+        ReDox::app_viewport()
             .with_title(title)
             .with_inner_size(size)
             .with_min_inner_size([280.0, 160.0])
@@ -53,7 +55,26 @@ pub(super) fn title_drag(context: &egui::Context, response: &egui::Response) {
     }
 }
 
-impl ForgeDesk {
+impl ReDox {
+    pub(crate) fn app_viewport() -> egui::ViewportBuilder {
+        static ICON: OnceLock<Arc<egui::IconData>> = OnceLock::new();
+        let icon = ICON.get_or_init(|| {
+            let image = image::load_from_memory_with_format(
+                include_bytes!("../../icon.ico"),
+                image::ImageFormat::Ico,
+            )
+            .expect("could not decode icon.ico")
+            .into_rgba8();
+            let (width, height) = image.dimensions();
+            Arc::new(egui::IconData {
+                rgba: image.into_raw(),
+                width,
+                height,
+            })
+        });
+        egui::ViewportBuilder::default().with_icon(Arc::clone(icon))
+    }
+
     pub(crate) fn validate_window_size(
         mut viewport: egui::ViewportBuilder,
     ) -> egui::ViewportBuilder {

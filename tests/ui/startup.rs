@@ -143,6 +143,21 @@ fn partial_configuration_has_safe_bounds() {
     let mut config: Config =
         serde_json::from_str(r#"{"cursor_count":999,"cursor_size":0}"#).unwrap();
     config.normalize();
-    assert_eq!(config.cursor_count, 32);
+    assert_eq!(config.cursor_count, 999);
     assert_eq!(config.cursor_size, 12.0);
+}
+
+#[test]
+fn cursor_count_has_only_a_minimum_and_survives_restart() {
+    for count in [0, 1, 33, 1_000_000, usize::MAX] {
+        let mut config = Config {
+            cursor_count: count,
+            ..Config::default()
+        };
+        config.normalize();
+        assert_eq!(config.cursor_count, count.max(1));
+        let saved = serde_json::to_string(&config).unwrap();
+        let restored = Startup::new(Some(serde_json::from_str(&saved).unwrap()));
+        assert_eq!(restored.config.cursor_count, count.max(1));
+    }
 }

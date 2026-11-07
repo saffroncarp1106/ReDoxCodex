@@ -1,10 +1,10 @@
-use crate::app::ForgeDesk;
+use crate::app::ReDox;
 use eframe::egui;
 
-impl ForgeDesk {
+impl ReDox {
     #[cfg(debug_assertions)]
     pub(in crate::app) fn verify_ui_restart(&mut self, context: &egui::Context) {
-        let Some(directory) = std::env::var_os("CODEX_RUST_VERIFY_UI_RESTART") else {
+        let Some(directory) = std::env::var_os("REDOX_VERIFY_UI_RESTART") else {
             return;
         };
         if self.startup.is_active() || context.cumulative_frame_nr() < 10 {
@@ -32,7 +32,7 @@ impl ForgeDesk {
     }
 
     pub(in crate::app) fn capture_frame(&mut self, context: &egui::Context) {
-        let Some(path) = &self.capture_path else {
+        let Some(path) = self.capture_path.clone() else {
             return;
         };
         self.capture_frames += 1;
@@ -46,19 +46,19 @@ impl ForgeDesk {
                     chat.title = "Equation and code formatting".into();
                     for (role, content) in [
                         (
-                            forgedesk::domain::Role::User,
+                            redox::domain::Role::User,
                             r"Calculate the pH when \([\mathrm{H}^{+}]=1.0\times10^{-3}\,\mathrm{mol/L}\).",
                         ),
                         (
-                            forgedesk::domain::Role::Assistant,
+                            redox::domain::Role::Assistant,
                             include_str!("previews/formatting.md"),
                         ),
                     ] {
-                        chat.messages.push(forgedesk::domain::Message {
+                        chat.messages.push(redox::domain::Message {
                             id: uuid::Uuid::new_v4(),
                             role,
                             content: content.into(),
-                            status: forgedesk::domain::MessageStatus::Complete,
+                            status: redox::domain::MessageStatus::Complete,
                             error: None,
                             model: "Formatting preview".into(),
                             attachments: Vec::new(),
@@ -80,11 +80,11 @@ impl ForgeDesk {
                                 .canonicalize()
                                 .ok()
                                 .and_then(|path| path.parent().map(std::path::Path::to_path_buf));
-                            chat.messages.push(forgedesk::domain::Message {
+                            chat.messages.push(redox::domain::Message {
                                 id: uuid::Uuid::new_v4(),
-                                role: forgedesk::domain::Role::Assistant,
+                                role: redox::domain::Role::Assistant,
                                 content,
-                                status: forgedesk::domain::MessageStatus::Complete,
+                                status: redox::domain::MessageStatus::Complete,
                                 error: None,
                                 model: "Local media preview".into(),
                                 attachments: Vec::new(),
@@ -115,6 +115,10 @@ impl ForgeDesk {
                     "advanced" => super::SettingsPage::Advanced,
                     _ => super::SettingsPage::Account,
                 };
+            }
+            if std::env::args().any(|arg| arg == "--skin-preview") {
+                self.ui_preferences.floating_windows = false;
+                self.begin_skin(context);
             }
             if std::env::args().any(|arg| arg == "--usage") {
                 self.usage_open = true;

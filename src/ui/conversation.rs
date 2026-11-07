@@ -1,71 +1,74 @@
 use super::icons::{self, Icon};
 use super::theme::{self, background, muted, text};
-use crate::app::ForgeDesk;
+use crate::app::ReDox;
 use eframe::egui::{
     self, Align, Color32, FontId, Frame, Layout, Margin, RichText, Sense, Stroke, vec2,
 };
-use forgedesk::domain::{Message, MessageStatus, Mode, Role};
+use redox::domain::{Message, MessageStatus, Mode, Role};
 
-impl ForgeDesk {
+impl ReDox {
     pub(in crate::app) fn conversation(&mut self, context: &egui::Context) {
-        egui::TopBottomPanel::top("conversation_header")
-            .exact_height(54.0)
-            .show_separator_line(false)
-            .frame(
-                Frame::NONE
-                    .fill(background())
-                    .inner_margin(Margin::symmetric(22, 10)),
-            )
-            .show(context, |ui| {
-                ui.horizontal(|ui| {
-                    if icons::button(ui, Icon::Panel, "Toggle sidebar").clicked() {
-                        self.sidebar_visible = !self.sidebar_visible;
-                    }
-                    let (rect, _) = ui.allocate_exact_size(vec2(18.0, 22.0), Sense::hover());
-                    icons::paint(ui.painter(), rect.shrink(2.0), Icon::Folder, text());
-                    ui.add_space(6.0);
-                    let title = self
-                        .session
-                        .active()
-                        .map_or("New chat", |chat| chat.title.as_str());
-                    ui.allocate_ui_with_layout(
-                        vec2(ui.available_width() - 102.0, 30.0),
-                        Layout::left_to_right(Align::Center),
-                        |ui| {
-                            ui.add(
-                                egui::Label::new(RichText::new(title).font(theme::semibold(14.0)))
-                                    .truncate(),
-                            );
-                        },
-                    );
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if icons::button(ui, Icon::Agent, "Toggle Ollama agents").clicked() {
-                            self.ui_preferences.agents_open = !self.ui_preferences.agents_open;
-                            context.request_repaint();
+        if context.viewport_id() == egui::ViewportId::ROOT {
+            egui::TopBottomPanel::top("conversation_header")
+                .exact_height(54.0)
+                .show_separator_line(false)
+                .frame(
+                    Frame::NONE
+                        .fill(background())
+                        .inner_margin(Margin::symmetric(22, 10)),
+                )
+                .show(context, |ui| {
+                    ui.horizontal(|ui| {
+                        if icons::button(ui, Icon::Panel, "Toggle sidebar").clicked() {
+                            self.sidebar_visible = !self.sidebar_visible;
                         }
-                        ui.menu_button("···", |ui| {
-                            if ui.button("Rename chat").clicked() {
-                                self.rename_open = true;
-                                ui.close();
+                        let (rect, _) = ui.allocate_exact_size(vec2(18.0, 22.0), Sense::hover());
+                        icons::paint(ui.painter(), rect.shrink(2.0), Icon::Folder, text());
+                        ui.add_space(6.0);
+                        let title = self
+                            .session
+                            .active()
+                            .map_or("New chat", |chat| chat.title.as_str());
+                        ui.allocate_ui_with_layout(
+                            vec2(ui.available_width() - 102.0, 30.0),
+                            Layout::left_to_right(Align::Center),
+                            |ui| {
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(title).font(theme::semibold(14.0)),
+                                    )
+                                    .truncate(),
+                                );
+                            },
+                        );
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if icons::button(ui, Icon::Agent, "Toggle Ollama agents").clicked() {
+                                self.ui_preferences.agents_open = !self.ui_preferences.agents_open;
+                                context.request_repaint();
                             }
-                            if let Some(chat) = self.session.active() {
-                                let id = chat.id;
-                                let archived = chat.archived;
-                                let label = if chat.archived {
-                                    "Restore chat"
-                                } else {
-                                    "Archive chat"
-                                };
-                                if ui.button(label).clicked() {
-                                    self.archive_local_chat(id, !archived);
+                            ui.menu_button("···", |ui| {
+                                if ui.button("Rename chat").clicked() {
+                                    self.rename_open = true;
                                     ui.close();
                                 }
-                            }
+                                if let Some(chat) = self.session.active() {
+                                    let id = chat.id;
+                                    let archived = chat.archived;
+                                    let label = if chat.archived {
+                                        "Restore chat"
+                                    } else {
+                                        "Archive chat"
+                                    };
+                                    if ui.button(label).clicked() {
+                                        self.archive_local_chat(id, !archived);
+                                        ui.close();
+                                    }
+                                }
+                            });
                         });
                     });
                 });
-            });
-
+        }
         self.composer(context);
 
         egui::CentralPanel::default()
@@ -79,11 +82,11 @@ impl ForgeDesk {
                     return;
                 };
                 if let Some(texture) = &self.ui_background {
-                    ui.painter().image(
-                        texture.id(),
+                    super::skins::paint_background(
+                        ui.painter(),
                         ui.max_rect(),
-                        egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
-                        Color32::WHITE,
+                        texture,
+                        self.active_ui.config.background_opacity,
                     );
                 }
                 if chat.messages.is_empty() {
@@ -232,12 +235,16 @@ impl ForgeDesk {
                                     self.pick_files(context);
                                     ui.close();
                                 }
-                                if ui.button("Open project folder").clicked() {
+                                if context.viewport_id() == egui::ViewportId::ROOT
+                                    && ui.button("Open project folder").clicked()
+                                {
                                     self.pick_workspace(context);
                                     ui.close();
                                 }
                             });
-                            if let Some(chat) = self.session.active_mut() {
+                            if let Some(chat) = self.session.active_mut()
+                                && chat.workspace.is_some()
+                            {
                                 let editable = self.running.is_none();
                                 let color = if chat.mode == Mode::FullAccess {
                                     Color32::from_rgb(231, 120, 49)
@@ -269,6 +276,9 @@ impl ForgeDesk {
                                     );
                                 });
                                 chat.set_mode(mode);
+                            } else {
+                                ui.label(RichText::new("Chat").size(12.0))
+                                    .on_hover_text("No project folder");
                             }
 
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -279,7 +289,7 @@ impl ForgeDesk {
                                             && (!chat.draft.trim().is_empty()
                                                 || !chat.attachments.is_empty())
                                     });
-                                let running = self.running.is_some();
+                                let running = self.active_chat_running();
                                 let (rect, response) =
                                     ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
                                 let fill = if can_send || running {
@@ -288,7 +298,7 @@ impl ForgeDesk {
                                     Color32::from_gray(85)
                                 };
                                 ui.painter().circle_filled(rect.center(), 14.0, fill);
-                                if running {
+                                if running && !can_send {
                                     ui.painter().rect_filled(
                                         egui::Rect::from_center_size(rect.center(), vec2(9.0, 9.0)),
                                         1,
@@ -303,18 +313,24 @@ impl ForgeDesk {
                                     );
                                 }
                                 if response
-                                    .on_hover_text(if running {
+                                    .on_hover_text(if running && !can_send {
                                         "Stop response"
                                     } else {
                                         "Send message"
                                     })
                                     .clicked()
                                 {
-                                    if running {
+                                    if running && !can_send {
                                         stop = true;
                                     } else if can_send {
                                         send = true;
                                     }
+                                }
+                                if running
+                                    && can_send
+                                    && icons::button(ui, Icon::Close, "Stop response").clicked()
+                                {
+                                    stop = true;
                                 }
                                 ui.add_enabled_ui(false, |ui| {
                                     icons::button(
@@ -327,7 +343,7 @@ impl ForgeDesk {
                             });
                         });
                     });
-                if self.running.is_some() {
+                if self.active_chat_running() {
                     ui.add(
                         egui::Label::new(RichText::new(&self.status).size(12.0).color(muted()))
                             .truncate(),
@@ -381,6 +397,12 @@ pub(super) fn render_message(
                     ui.push_id(message.id, |ui| {
                         super::markdown::show_in_workspace(ui, &message.content, workspace)
                     });
+                    if message.status == MessageStatus::Queued && message.error.is_none() {
+                        ui.label(RichText::new("Pending").small());
+                    }
+                    if let Some(error) = &message.error {
+                        ui.label(RichText::new(error).small());
+                    }
                 });
         });
         return;
@@ -396,7 +418,7 @@ pub(super) fn render_message(
             ui.label(RichText::new(&message.model).small().color(muted()));
         }
         ui.push_id(message.id, |ui| {
-            super::markdown::show_in_workspace(ui, &message.content, workspace)
+            super::response_text::show(ui, message, workspace);
         });
     }
 

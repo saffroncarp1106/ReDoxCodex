@@ -1,15 +1,13 @@
-use eframe::egui::{
-    self, Align, Color32, FontId, Frame, Layout, Margin, Rect, RichText, pos2, vec2,
-};
-use forgedesk::domain::Mode;
+use eframe::egui::{self, Align, Color32, FontId, Frame, Layout, Margin, Rect, RichText, vec2};
+use redox::domain::Mode;
 
 use super::{
     icons::{self, Icon},
     packs, theme,
 };
-use crate::app::ForgeDesk;
+use crate::app::ReDox;
 
-impl ForgeDesk {
+impl ReDox {
     pub(in crate::app) fn gemini_rail(&mut self, context: &egui::Context) {
         egui::SidePanel::left("gemini_rail")
             .exact_width(64.0)
@@ -81,22 +79,39 @@ impl ForgeDesk {
             .session
             .active()
             .is_none_or(|chat| chat.messages.is_empty());
-        if !empty {
+        if context.viewport_id() == egui::ViewportId::ROOT {
             egui::TopBottomPanel::top("gemini_chat_title")
                 .exact_height(44.0)
                 .show_separator_line(false)
                 .frame(
                     Frame::NONE
                         .fill(theme::background())
-                        .inner_margin(Margin::symmetric(24, 9)),
+                        .inner_margin(Margin::symmetric(24, 7)),
                 )
                 .show(context, |ui| {
-                    let title = self
-                        .session
-                        .active()
-                        .map_or("New chat", |chat| chat.title.as_str());
-                    ui.label(RichText::new(title).size(15.0).color(theme::muted()));
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if icons::button(ui, Icon::Agent, "Toggle Ollama agents").clicked() {
+                            self.ui_preferences.agents_open = !self.ui_preferences.agents_open;
+                            context.request_repaint();
+                        }
+                        ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                            if !empty {
+                                let title = self
+                                    .session
+                                    .active()
+                                    .map_or("New chat", |chat| chat.title.as_str());
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(title).size(15.0).color(theme::muted()),
+                                    )
+                                    .truncate(),
+                                );
+                            }
+                        });
+                    });
                 });
+        }
+        if !empty {
             egui::TopBottomPanel::bottom("gemini_composer")
                 .show_separator_line(false)
                 .frame(
@@ -113,11 +128,11 @@ impl ForgeDesk {
             .show(context, |ui| {
                 let rect = ui.max_rect();
                 if let Some(texture) = &self.ui_background {
-                    ui.painter().image(
-                        texture.id(),
-                        rect,
-                        Rect::from_min_max(egui::Pos2::ZERO, pos2(1.0, 1.0)),
-                        Color32::WHITE,
+                    super::skins::paint_background(
+                        ui.painter(),
+                        ui.max_rect(),
+                        texture,
+                        self.active_ui.config.background_opacity,
                     );
                 }
                 if empty {
@@ -203,7 +218,9 @@ impl ForgeDesk {
                             self.pick_files(context);
                             ui.close();
                         }
-                        if ui.button("Open project folder").clicked() {
+                        if context.viewport_id() == egui::ViewportId::ROOT
+                            && ui.button("Open project folder").clicked()
+                        {
                             self.pick_workspace(context);
                             ui.close();
                         }
@@ -245,11 +262,12 @@ impl ForgeDesk {
                             }
                         });
                     }
-                    if self.running.is_some() {
+                    if self.active_chat_running() {
                         if icons::button(ui, Icon::Close, "Stop response").clicked() {
                             self.stop_response();
                         }
-                    } else {
+                    }
+                    {
                         let ready = self.session.active().is_some_and(|chat| {
                             !chat.draft.trim().is_empty() || !chat.attachments.is_empty()
                         });
@@ -272,7 +290,11 @@ impl ForgeDesk {
                 .active()
                 .is_none_or(|chat| chat.messages.is_empty());
             if empty {
-                if let Some(chat) = self.session.active_mut() {
+                if let Some(chat) = self
+                    .session
+                    .active_mut()
+                    .filter(|chat| chat.workspace.is_some())
+                {
                     ui.add_enabled_ui(self.running.is_none(), |ui| {
                         if ui
                             .selectable_label(chat.mode == Mode::Chat, "Chat")
@@ -295,7 +317,9 @@ impl ForgeDesk {
         ui.add_space(5.0);
         centered_controls(ui, "gemini_chat_options", |ui| {
             self.model_effort_picker(ui, "gemini_model_effort");
-            if let Some(chat) = self.session.active_mut() {
+            if let Some(chat) = self.session.active_mut()
+                && chat.workspace.is_some()
+            {
                 let mut mode = chat.mode;
                 ui.add_enabled_ui(self.running.is_none(), |ui| {
                     egui::ComboBox::from_id_salt("gemini_access")
@@ -308,6 +332,8 @@ impl ForgeDesk {
                         });
                 });
                 chat.set_mode(mode);
+            } else {
+                ui.label("Chat").on_hover_text("No project folder");
             }
             ui.label(
                 RichText::new(if self.is_ollama() {
@@ -325,7 +351,7 @@ impl ForgeDesk {
         if self.picking_files {
             ui.label("Loading files…");
         }
-        if self.running.is_some()
+        if self.active_chat_running()
             || (!self.is_ollama() && self.models.is_empty() && !self.refreshing)
         {
             ui.label(RichText::new(&self.status).small().color(theme::muted()));

@@ -232,13 +232,12 @@ fn local_chats_survive_restart_and_switching_provider_starts_a_fresh_codex_threa
 #[tokio::test]
 #[ignore = "uses an installed local Ollama model; no model download or Codex request"]
 async fn live_local_model_smoke_test() {
-    let model =
-        std::env::var("CODEX_RUST_OLLAMA_TEST_MODEL").expect("Set CODEX_RUST_OLLAMA_TEST_MODEL");
+    let model = std::env::var("REDOX_OLLAMA_TEST_MODEL").expect("Set REDOX_OLLAMA_TEST_MODEL");
     let mut request = request("http://127.0.0.1:11434".into(), false);
     request.model = model;
     request.settings.output_tokens = 16;
     request.settings.cpu_only =
-        std::env::var("CODEX_RUST_OLLAMA_TEST_CPU").is_ok_and(|value| value == "1");
+        std::env::var("REDOX_OLLAMA_TEST_CPU").is_ok_and(|value| value == "1");
     request.messages[0].content = "Reply with exactly LOCAL_OK".into();
     let (sender, mut events) = mpsc::channel(128);
     let (_cancel, receiver) = watch::channel(false);
@@ -270,8 +269,7 @@ async fn live_local_model_smoke_test() {
 #[tokio::test]
 #[ignore = "uses an installed local Ollama model to read a temporary project fixture"]
 async fn live_local_project_read_test() {
-    let model =
-        std::env::var("CODEX_RUST_OLLAMA_TEST_MODEL").expect("Set CODEX_RUST_OLLAMA_TEST_MODEL");
+    let model = std::env::var("REDOX_OLLAMA_TEST_MODEL").expect("Set REDOX_OLLAMA_TEST_MODEL");
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("temp/verification/ollama-live-project")
         .join(uuid::Uuid::new_v4().to_string());

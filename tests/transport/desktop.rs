@@ -2,6 +2,52 @@ use super::*;
 use crate::domain::{MessageStatus, Session};
 
 #[test]
+fn escape_is_latched_for_the_desktop_response_and_new_runs_start_clean() {
+    let activity = Activity::default();
+    assert!(!activity.observe_escape(true));
+    assert!(!activity.snapshot().active);
+    activity.begin().unwrap();
+    assert!(activity.snapshot().active);
+    assert!(activity.observe_escape(true));
+    assert!(!activity.snapshot().active);
+    assert!(activity.observe_escape(false));
+    assert!(activity.begin().is_err());
+    activity.finish();
+    assert!(activity.snapshot().stopped);
+    let next = Activity::default();
+    next.begin().unwrap();
+    next.finish();
+    assert!(!next.snapshot().active);
+    assert!(!next.snapshot().stopped);
+}
+
+#[test]
+fn escape_cancellation_keeps_the_partial_response_and_cancelled_status() {
+    let mut session = Session::default();
+    session.new_chat();
+    session.active_mut().unwrap().draft = "A desktop task".into();
+    let run = session.prepare_run().unwrap();
+    session.run_message_mut(run).unwrap().content = "Partial progress".into();
+    assert!(crate::run::apply_event(
+        &mut session,
+        Some(run),
+        crate::run::RunEvent {
+            run,
+            update: crate::run::Update::Cancelled,
+        }
+    ));
+    let message = session
+        .active()
+        .unwrap()
+        .messages
+        .iter()
+        .find(|message| message.id == run.message)
+        .unwrap();
+    assert_eq!(message.content, "Partial progress");
+    assert_eq!(message.status, MessageStatus::Cancelled);
+}
+
+#[test]
 fn tool_registration_composes_with_ollama_and_settings_survive_restart() {
     let mut session = Session::default();
     session.new_chat();
@@ -100,6 +146,7 @@ fn malformed_input_is_rejected_and_errors_use_the_app_server_result_format() {
 
 #[tokio::test]
 async fn disabled_cancelled_and_denied_actions_cannot_reach_the_desktop() {
+    let activity = Activity::default();
     let (sender, mut events) = mpsc::channel(4);
     let (cancel, receiver) = watch::channel(false);
     let mut approved = false;
@@ -109,7 +156,8 @@ async fn disabled_cancelled_and_denied_actions_cannot_reach_the_desktop() {
             &Settings::default(),
             &mut approved,
             &sender,
-            receiver.clone()
+            receiver.clone(),
+            &activity,
         )
         .await
         .is_err()
@@ -126,7 +174,8 @@ async fn disabled_cancelled_and_denied_actions_cannot_reach_the_desktop() {
             &settings,
             &mut approved,
             &sender,
-            receiver
+            receiver,
+            &activity,
         )
         .await
         .is_err()
@@ -137,7 +186,14 @@ async fn disabled_cancelled_and_denied_actions_cannot_reach_the_desktop() {
     }
     let (_cancel, receiver) = watch::channel(false);
     let arguments = json!({"action":"type","text":"must not type"});
-    let execution = execute(&arguments, &settings, &mut approved, &sender, receiver);
+    let execution = execute(
+        &arguments,
+        &settings,
+        &mut approved,
+        &sender,
+        receiver,
+        &activity,
+    );
     let rejection = async {
         let ProviderEvent::Approval(approval) = events.recv().await.unwrap() else {
             panic!("Expected approval");
@@ -147,11 +203,13 @@ async fn disabled_cancelled_and_denied_actions_cannot_reach_the_desktop() {
     let (result, ()) = tokio::join!(execution, rejection);
     assert!(result.unwrap_err().contains("not approved"));
     assert!(!approved);
+    assert!(!activity.snapshot().active);
     assert!(events.try_recv().is_err());
 }
 
 #[tokio::test]
 async fn approval_does_not_type_into_the_window_that_received_the_approval_click() {
+    let activity = Activity::default();
     if !SUPPORTED {
         return;
     }
@@ -163,7 +221,14 @@ async fn approval_does_not_type_into_the_window_that_received_the_approval_click
     };
     let mut approved = false;
     let arguments = json!({"action":"type","text":"must not type"});
-    let execution = execute(&arguments, &settings, &mut approved, &sender, receiver);
+    let execution = execute(
+        &arguments,
+        &settings,
+        &mut approved,
+        &sender,
+        receiver,
+        &activity,
+    );
     let approval = async {
         let ProviderEvent::Approval(approval) = events.recv().await.unwrap() else {
             panic!("Expected approval");
@@ -172,6 +237,7 @@ async fn approval_does_not_type_into_the_window_that_received_the_approval_click
     };
     let (result, ()) = tokio::join!(execution, approval);
     assert!(approved);
+    assert!(!activity.snapshot().active);
     assert!(
         result.unwrap()[0]["text"]
             .as_str()
@@ -196,6 +262,7 @@ async fn installed_codex_accepts_native_desktop_tools() {
 #[test]
 #[ignore = "opens an isolated Windows test edit control, tests native input, captures screenshot in memory, then closes it; no model generation"]
 fn native_desktop_round_trip_in_an_isolated_window() {
+    let activity = Activity::default();
     use base64::Engine;
     use std::ptr::{null, null_mut};
     use windows_sys::Win32::Foundation::HWND;
@@ -241,6 +308,7 @@ fn native_desktop_round_trip_in_an_isolated_window() {
             count: 1,
         },
         &receiver,
+        &activity,
     )
     .unwrap();
     for _ in 0..20 {
@@ -258,9 +326,10 @@ fn native_desktop_round_trip_in_an_isolated_window() {
             window: window.handle as usize as u64,
         },
         &receiver,
+        &activity,
     )
     .unwrap();
-    let titles = platform::execute(Action::Windows, &receiver).unwrap();
+    let titles = platform::execute(Action::Windows, &receiver, &activity).unwrap();
     assert_eq!(titles[0]["type"], "inputText");
     platform::execute(
         Action::Click {
@@ -270,6 +339,7 @@ fn native_desktop_round_trip_in_an_isolated_window() {
             count: 1,
         },
         &receiver,
+        &activity,
     )
     .unwrap();
     platform::execute(
@@ -277,6 +347,7 @@ fn native_desktop_round_trip_in_an_isolated_window() {
             text: "Native desktop ✓".into(),
         },
         &receiver,
+        &activity,
     )
     .unwrap();
     for _ in 0..20 {
@@ -295,7 +366,7 @@ fn native_desktop_round_trip_in_an_isolated_window() {
         String::from_utf16_lossy(&text[..length as usize]),
         "Native desktop ✓"
     );
-    let screenshot = platform::execute(Action::Screenshot, &receiver).unwrap();
+    let screenshot = platform::execute(Action::Screenshot, &receiver, &activity).unwrap();
     assert_eq!(screenshot[1]["type"], "inputImage");
     let url = screenshot[1]["imageUrl"].as_str().unwrap();
     let bytes = base64::engine::general_purpose::STANDARD

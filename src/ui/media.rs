@@ -159,7 +159,7 @@ pub(super) fn show(ui: &mut egui::Ui, destination: &str, video: bool, workspace:
 fn open_button(ui: &mut egui::Ui, label: &str, url: &str) {
     let id = ui.id().with(("media_open", url));
     if ui.button(label).clicked() {
-        let error = forgedesk::media::open_media(url).err();
+        let error = redox::media::open_media(url).err();
         ui.data_mut(|data| data.insert_temp(id, error));
     }
     if let Some(Some(error)) = ui.data(|data| data.get_temp::<Option<String>>(id)) {

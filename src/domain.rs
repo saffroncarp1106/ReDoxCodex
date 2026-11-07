@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::attachments::Attachment;
 use serde::{Deserialize, Serialize};
@@ -58,6 +58,7 @@ pub enum Role {
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Debug)]
 pub enum MessageStatus {
+    Queued,
     Streaming,
     Complete,
     Cancelled,
@@ -65,7 +66,7 @@ pub enum MessageStatus {
     Interrupted,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Message {
     pub id: Uuid,
     pub role: Role,
@@ -128,6 +129,11 @@ impl Chat {
     }
 
     pub fn new(workspace: Option<PathBuf>) -> Self {
+        let mode = if workspace.is_some() {
+            Mode::Code
+        } else {
+            Mode::Chat
+        };
         Self {
             desktop_tools: false,
             delegation_tools: false,
@@ -142,13 +148,18 @@ impl Chat {
             workspace,
             messages: Vec::new(),
             thread_id: None,
-            mode: Mode::default(),
+            mode,
             attachments: Vec::new(),
             previous_thread_ids: Vec::new(),
         }
     }
 
     pub fn set_mode(&mut self, mode: Mode) {
+        let mode = if self.workspace.is_some() {
+            mode
+        } else {
+            Mode::Chat
+        };
         if self.mode != mode {
             self.reset_server_thread();
             self.mode = mode;
@@ -157,6 +168,11 @@ impl Chat {
 
     pub fn set_workspace(&mut self, workspace: Option<PathBuf>) {
         if self.workspace != workspace {
+            if workspace.is_none() {
+                self.mode = Mode::Chat;
+            } else if self.workspace.is_none() {
+                self.mode = Mode::Code;
+            }
             self.reset_server_thread();
             self.workspace = workspace;
         }
@@ -216,6 +232,90 @@ impl Default for Session {
 }
 
 impl Session {
+    pub fn branch_project_chat(&mut self, workspace: &Path) -> Uuid {
+        let belongs = |chat: &&Chat| !chat.archived && chat.workspace.as_deref() == Some(workspace);
+        let source = self
+            .active()
+            .filter(belongs)
+            .or_else(|| self.chats.iter().rev().find(belongs));
+        let mut branch = Chat::new(Some(workspace.to_path_buf()));
+        if let Some(source) = source {
+            branch.provider = source.provider;
+            branch.ollama_model = source.ollama_model.clone();
+            branch.mode = source.mode;
+            branch.messages = source
+                .messages
+                .iter()
+                .filter(|m| m.status == MessageStatus::Complete)
+                .cloned()
+                .map(|mut message| {
+                    message.id = Uuid::new_v4();
+                    message
+                })
+                .collect();
+            if !branch.messages.is_empty() {
+                branch.title = format!("Branch · {}", source.title);
+            }
+        }
+        let id = branch.id;
+        self.chats.push(branch);
+        id
+    }
+
+    pub fn queue_prompt(&mut self) -> Result<Uuid, String> {
+        let chat = self.active_mut().ok_or("Create a chat first.")?;
+        let content = chat.draft.trim().to_owned();
+        if chat.archived || (content.is_empty() && chat.attachments.is_empty()) {
+            return Err("Enter a prompt in an unarchived chat.".into());
+        }
+        let bytes = content.len()
+            + chat
+                .attachments
+                .iter()
+                .map(Attachment::text_bytes)
+                .sum::<usize>()
+            + chat
+                .messages
+                .iter()
+                .filter(|m| m.status == MessageStatus::Queued)
+                .map(|m| {
+                    m.content.len()
+                        + m.attachments
+                            .iter()
+                            .map(Attachment::text_bytes)
+                            .sum::<usize>()
+                })
+                .sum::<usize>();
+        if bytes > MAX_CONTEXT_BYTES {
+            return Err(
+                "Queued feedback exceeds the 128 KiB text budget. Your draft is kept.".into(),
+            );
+        }
+        let id = Uuid::new_v4();
+        chat.messages.push(Message {
+            id,
+            role: Role::User,
+            content,
+            status: MessageStatus::Queued,
+            error: None,
+            model: String::new(),
+            attachments: std::mem::take(&mut chat.attachments),
+        });
+        chat.draft.clear();
+        Ok(id)
+    }
+
+    pub fn stop_queued(&mut self, chat_id: Uuid) {
+        if let Some(chat) = self.chats.iter_mut().find(|chat| chat.id == chat_id) {
+            for message in &mut chat.messages {
+                if message.status == MessageStatus::Queued {
+                    message.status = MessageStatus::Interrupted;
+                    message.error = Some("Feedback was not sent. Copy it to send again.".into());
+                }
+            }
+        }
+    }
+
     pub fn recover(&mut self) {
         if self.model.contains("qwen")
             || self.model.contains("huihui")
@@ -244,6 +344,9 @@ impl Session {
             if self.tool_access_version < 2 {
                 chat.mode = Mode::Code;
                 chat.reset_server_thread();
+            }
+            if chat.workspace.is_none() {
+                chat.set_mode(Mode::Chat);
             }
             for message in &mut chat.messages {
                 if message.status == MessageStatus::Streaming {
@@ -303,14 +406,17 @@ impl Session {
             return Err("Choose a model in settings first.".into());
         }
 
-        let workspace = self.workspace.clone();
         let chat = self.active_mut().ok_or("Create a chat first.")?;
-        if chat.workspace.is_none() {
-            chat.workspace = workspace;
-        }
-        let prompt = chat.draft.trim().to_owned();
+        let queued = chat
+            .messages
+            .iter()
+            .position(|m| m.status == MessageStatus::Queued);
+        let prompt = queued.map_or_else(
+            || chat.draft.trim().to_owned(),
+            |i| chat.messages[i].content.clone(),
+        );
 
-        if chat.archived || (prompt.is_empty() && chat.attachments.is_empty()) {
+        if chat.archived || (queued.is_none() && prompt.is_empty() && chat.attachments.is_empty()) {
             return Err("Enter a prompt in an unarchived chat.".into());
         }
 
@@ -331,7 +437,8 @@ impl Session {
                 .sum()
         };
 
-        let attachment_bytes: usize = chat.attachments.iter().map(Attachment::text_bytes).sum();
+        let attachments = queued.map_or(&chat.attachments, |i| &chat.messages[i].attachments);
+        let attachment_bytes: usize = attachments.iter().map(Attachment::text_bytes).sum();
         if history_bytes
             .saturating_add(prompt.len())
             .saturating_add(attachment_bytes)
@@ -358,16 +465,24 @@ impl Session {
                 .collect();
         }
 
-        chat.messages.push(Message {
-            id: Uuid::new_v4(),
-            role: Role::User,
-            content: prompt,
-            status: MessageStatus::Complete,
-            error: None,
-            model: model.clone(),
-            attachments: std::mem::take(&mut chat.attachments),
-        });
-        chat.draft.clear();
+        if let Some(index) = queued {
+            let mut message = chat.messages.remove(index);
+            message.status = MessageStatus::Complete;
+            message.error = None;
+            message.model = model.clone();
+            chat.messages.push(message);
+        } else {
+            chat.messages.push(Message {
+                id: Uuid::new_v4(),
+                role: Role::User,
+                content: prompt,
+                status: MessageStatus::Complete,
+                error: None,
+                model: model.clone(),
+                attachments: std::mem::take(&mut chat.attachments),
+            });
+            chat.draft.clear();
+        }
 
         let message_id = Uuid::new_v4();
         chat.messages.push(Message {
@@ -419,6 +534,14 @@ impl Session {
     }
 
     pub fn new_chat(&mut self) {
+        self.new_chat_in(None);
+    }
+
+    pub fn new_project_chat(&mut self, workspace: PathBuf) {
+        self.new_chat_in(Some(workspace));
+    }
+
+    fn new_chat_in(&mut self, workspace: Option<PathBuf>) {
         let (provider, model) = self
             .active()
             .map_or((Provider::Codex, String::new()), |chat| {
@@ -426,7 +549,7 @@ impl Session {
             });
         let matches = |chat: &&Chat| {
             chat.is_blank()
-                && chat.workspace == self.workspace
+                && chat.workspace == workspace
                 && chat.provider == provider
                 && (provider != Provider::Ollama || chat.ollama_model == model)
         };
@@ -439,7 +562,7 @@ impl Session {
             self.active_chat = Some(id);
             return;
         }
-        let mut chat = Chat::new(self.workspace.clone());
+        let mut chat = Chat::new(workspace);
         if let Some(active) = self.active() {
             chat.provider = active.provider;
             chat.ollama_model = active.ollama_model.clone();

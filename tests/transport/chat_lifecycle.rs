@@ -35,21 +35,54 @@ fn blank_chat_reuse_respects_project_and_provider() {
         workspace: Some("project-one".into()),
         ..Default::default()
     };
-    session.new_chat();
+    session.new_project_chat("project-one".into());
     let one = session.active_chat;
     session.workspace = Some("project-two".into());
-    session.new_chat();
+    session.new_project_chat("project-two".into());
     assert_ne!(one, session.active_chat);
     session
         .active_mut()
         .unwrap()
         .set_provider(Provider::Ollama, "qwen-test".into());
     for _ in 0..3 {
-        session.new_chat();
+        session.new_project_chat("project-two".into());
     }
     assert_eq!(session.chats.len(), 2);
     assert_eq!(session.active().unwrap().provider, Provider::Ollama);
     assert_eq!(session.active().unwrap().ollama_model, "qwen-test");
+}
+
+#[test]
+fn new_chat_can_send_without_inheriting_the_selected_project() {
+    let mut session = Session {
+        workspace: Some("selected-project".into()),
+        ..Default::default()
+    };
+    session.new_project_chat("selected-project".into());
+    let project = session.active_chat;
+    session.new_chat();
+    assert_ne!(session.active_chat, project);
+    session.active_mut().unwrap().draft = "Hello".into();
+    session.prepare_run().unwrap();
+    let chat = session.active().unwrap();
+    let request = crate::codex::ChatRequest::from_chat(chat, DEFAULT_MODEL.into());
+    assert_eq!(request.cwd, None);
+    assert!(request.mode == Mode::Chat);
+    assert_eq!(
+        session.workspace.as_deref(),
+        Some(Path::new("selected-project"))
+    );
+}
+
+#[test]
+fn loading_server_history_preserves_a_local_chat_without_a_project() {
+    let mut session = Session::default();
+    session.new_chat();
+    let chat = session.active_mut().unwrap();
+    chat.thread_id = Some("server-thread".into());
+    let id = chat.id;
+    assert_eq!(crate::history::import(&mut session, page(), false), id);
+    assert_eq!(session.active().unwrap().workspace, None);
 }
 
 fn page() -> crate::history::ConversationPage {

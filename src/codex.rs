@@ -166,6 +166,7 @@ pub fn resolve_executable(configured: &str) -> String {
 }
 
 pub struct Rpc {
+    record: Vec<u8>,
     child: Child,
     input: ChildStdin,
     output: BufReader<ChildStdout>,
@@ -199,10 +200,11 @@ impl Rpc {
             input,
             output,
             next_id: 1,
+            record: Vec::new(),
         };
         rpc.call(
             "initialize",
-            json!({"clientInfo": {"name":"codex_rust", "title":"Codex Rust", "version":"0.1.0"}, "capabilities":{"experimentalApi":true}}),
+            json!({"clientInfo": {"name":"redox", "title":"ReDox", "version":"0.1.0"}, "capabilities":{"experimentalApi":true}}),
         )
         .await?;
         rpc.write(json!({"method":"initialized"})).await?;
@@ -228,7 +230,7 @@ impl Rpc {
     }
 
     pub async fn read(&mut self) -> Result<Value, String> {
-        match read_message(&mut self.output).await {
+        match read_message_buffered(&mut self.output, &mut self.record).await {
             Err(error) if error == "Codex app-server disconnected." => {
                 let status = self
                     .child
@@ -275,7 +277,13 @@ pub async fn read_message<R: tokio::io::AsyncBufRead + Unpin>(
     output: &mut R,
 ) -> Result<Value, String> {
     let mut record = Vec::new();
+    read_message_buffered(output, &mut record).await
+}
 
+async fn read_message_buffered<R: tokio::io::AsyncBufRead + Unpin>(
+    output: &mut R,
+    record: &mut Vec<u8>,
+) -> Result<Value, String> {
     loop {
         let available = output.fill_buf().await.map_err(|error| error.to_string())?;
 
@@ -297,8 +305,10 @@ pub async fn read_message<R: tokio::io::AsyncBufRead + Unpin>(
         output.consume(count);
 
         if complete {
-            return serde_json::from_slice(&record)
+            let result = serde_json::from_slice(record)
                 .map_err(|error| format!("Invalid Codex protocol message: {error}"));
+            record.clear();
+            return result;
         }
     }
 }
@@ -315,6 +325,41 @@ pub fn rpc_result(message: Value) -> Result<Value, String> {
         .get("result")
         .cloned()
         .ok_or_else(|| "Codex response has no result.".into())
+}
+
+#[cfg(test)]
+mod feedback_transport_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn steering_does_not_discard_a_partially_received_protocol_record() {
+        let (mut writer, reader) = tokio::io::duplex(1024);
+        let mut reader = BufReader::new(reader);
+        let mut record = Vec::new();
+        writer
+            .write_all(br#"{"method":"item/agentMessage/"#)
+            .await
+            .unwrap();
+        assert!(
+            tokio::time::timeout(
+                Duration::from_millis(10),
+                read_message_buffered(&mut reader, &mut record)
+            )
+            .await
+            .is_err()
+        );
+        assert!(!record.is_empty());
+        writer
+            .write_all(b"delta\",\"params\":{\"delta\":\"Hello\"}}\n")
+            .await
+            .unwrap();
+        let message = read_message_buffered(&mut reader, &mut record)
+            .await
+            .unwrap();
+        assert_eq!(message["method"], "item/agentMessage/delta");
+        assert_eq!(message["params"]["delta"], "Hello");
+        assert!(record.is_empty());
+    }
 }
 
 pub struct ConnectionInfo {
@@ -430,6 +475,7 @@ pub async fn usage_limits(executable: &str) -> Result<UsageInfo, String> {
 }
 
 pub struct ChatRequest {
+    pub desktop_activity: crate::desktop::Activity,
     pub desktop: crate::desktop::Settings,
     pub delegation: Option<crate::ollama::Settings>,
     pub model: String,
@@ -447,7 +493,10 @@ impl ChatRequest {
             chat.messages
                 .iter()
                 .rev()
-                .find(|message| message.role == Role::User)
+                .find(|message| {
+                    message.role == Role::User
+                        && message.status == crate::domain::MessageStatus::Complete
+                })
                 .map(message_prompt)
                 .unwrap_or_default()
         } else {
@@ -469,7 +518,10 @@ impl ChatRequest {
         let images = chat
             .messages
             .iter()
-            .filter(|message| message.role == Role::User)
+            .filter(|message| {
+                message.role == Role::User
+                    && message.status == crate::domain::MessageStatus::Complete
+            })
             .rev()
             .take(if chat.thread_id.is_some() {
                 1
@@ -481,6 +533,7 @@ impl ChatRequest {
             .map(|attachment| attachment.path.clone())
             .collect();
         Self {
+            desktop_activity: crate::desktop::Activity::default(),
             desktop: crate::desktop::Settings::default(),
             delegation: None,
             model,
@@ -504,7 +557,7 @@ impl ChatRequest {
     }
 }
 
-fn message_prompt(message: &crate::domain::Message) -> String {
+pub fn message_prompt(message: &crate::domain::Message) -> String {
     let mut prompt = message.content.clone();
     for attachment in &message.attachments {
         if let Some(text) = &attachment.text {
@@ -522,6 +575,7 @@ pub struct Approval {
 }
 
 pub enum ProviderEvent {
+    Feedback(uuid::Uuid, Result<(), String>),
     Delegation(crate::delegation::Event),
     Metrics(crate::ollama::Stats),
     Thread(String),
@@ -534,7 +588,50 @@ pub async fn stream_chat(
     executable: &str,
     request: ChatRequest,
     sender: mpsc::Sender<ProviderEvent>,
+    cancel: watch::Receiver<bool>,
+) -> Result<(), String> {
+    let (_sender, feedback) = mpsc::unbounded_channel();
+    stream_chat_with_feedback(executable, request, sender, cancel, feedback).await
+}
+
+#[derive(Clone)]
+pub struct Feedback {
+    pub id: uuid::Uuid,
+    pub prompt: String,
+    pub images: Vec<PathBuf>,
+}
+
+impl Feedback {
+    pub fn from_message(message: &crate::domain::Message) -> Self {
+        Self {
+            id: message.id,
+            prompt: message_prompt(message),
+            images: message
+                .attachments
+                .iter()
+                .filter(|a| a.text.is_none())
+                .map(|a| a.path.clone())
+                .collect(),
+        }
+    }
+
+    pub fn params(&self, thread: &str, turn: &str) -> Value {
+        let mut input = vec![json!({"type":"text", "text": self.prompt})];
+        input.extend(
+            self.images
+                .iter()
+                .map(|path| json!({"type":"localImage", "path":path})),
+        );
+        json!({"threadId":thread, "expectedTurnId":turn, "input":input})
+    }
+}
+
+pub async fn stream_chat_with_feedback(
+    executable: &str,
+    request: ChatRequest,
+    sender: mpsc::Sender<ProviderEvent>,
     mut cancel: watch::Receiver<bool>,
+    mut feedback: mpsc::UnboundedReceiver<Feedback>,
 ) -> Result<(), String> {
     validate_workspace(request.cwd.as_deref())?;
     let mut rpc = tokio::select! {
@@ -555,10 +652,12 @@ pub async fn stream_chat(
         params["cwd"] = json!(cwd);
     }
 
-    params["developerInstructions"] = json!(match request.mode {
-        Mode::Code | Mode::FullAccess =>
+    params["developerInstructions"] = json!(match (request.cwd.is_some(), request.mode) {
+        (false, _) =>
+            "You are the assistant in a conversation without a project folder. Answer conversationally and use any attachments the user provides. Do not treat the process working directory as a user project or inspect or modify project files.",
+        (true, Mode::Code | Mode::FullAccess) =>
             "You are the coding assistant in this application. You can chat, inspect workspace files, edit code, and run commands through the available tools and approval policy. When asked about files, inspect the real files. Report actual tool errors if access fails; do not tell the user to switch applications or agent versions.",
-        Mode::Chat =>
+        (true, Mode::Chat) =>
             "You are the assistant in this application with read-only workspace access. Use available tools to inspect files and run read-only commands when requested. Do not modify files or run commands that change the workspace. Report actual tool errors if access fails; do not tell the user to switch applications or agent versions to read files.",
     });
     if let Some(settings) = &request.delegation {
@@ -601,6 +700,8 @@ pub async fn stream_chat(
         .await?;
 
     let mut turn_id = None;
+    let mut pending_feedback = None;
+    let mut can_steer = true;
     let mut messages = HashMap::<String, String>::new();
     let mut answer_bytes = 0usize;
     let mut delegation_count = 0usize;
@@ -609,6 +710,11 @@ pub async fn stream_chat(
 
     loop {
         let message = tokio::select! {
+            Some(input) = feedback.recv(), if can_steer && turn_id.is_some() && pending_feedback.is_none() => {
+                let id = rpc.request("turn/steer", input.params(&thread, turn_id.as_deref().unwrap())).await?;
+                pending_feedback = Some((id, input.id));
+                continue;
+            }
             result = rpc.read() => result?,
             _ = cancel.changed() => {
                 if let Some(turn) = &turn_id {
@@ -626,6 +732,15 @@ pub async fn stream_chat(
         };
 
         if message.get("method").is_none() {
+            if let Some((id, input)) = pending_feedback
+                && message["id"] == id
+            {
+                pending_feedback = None;
+                let result = rpc_result(message).map(|_| ());
+                can_steer = result.is_ok();
+                send(&sender, ProviderEvent::Feedback(input, result)).await?;
+                continue;
+            }
             if message.get("error").is_some() {
                 return Err(rpc_result(message).unwrap_err());
             }
@@ -654,6 +769,7 @@ pub async fn stream_chat(
                         &mut desktop_approved,
                         &sender,
                         cancel.clone(),
+                        &request.desktop_activity,
                     )
                     .await
                 };
@@ -778,6 +894,24 @@ pub async fn stream_chat(
             }
             "turn/completed" => {
                 let turn = &params["turn"];
+                if let Some((id, input)) = pending_feedback {
+                    let reply = tokio::time::timeout(Duration::from_millis(500), async {
+                        loop {
+                            let message = rpc.read().await?;
+                            if message.get("method").is_none() && message["id"] == id {
+                                return Ok::<_, String>(message);
+                            }
+                        }
+                    })
+                    .await;
+                    if let Ok(Ok(message)) = reply {
+                        send(
+                            &sender,
+                            ProviderEvent::Feedback(input, rpc_result(message).map(|_| ())),
+                        )
+                        .await?;
+                    }
+                }
                 rpc.close().await;
                 return match turn["status"].as_str() {
                     Some("completed") => Ok(()),

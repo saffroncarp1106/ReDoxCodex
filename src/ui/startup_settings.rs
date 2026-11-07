@@ -33,7 +33,7 @@ impl Startup {
             "Original Swarm animation — Joel Califa",
             "https://califa.github.io/swarm-site/",
         );
-        ui.label("Native Rust adaptation for CodexRustReWrite.");
+        ui.label("Native Rust adaptation for ReDox.");
         ui.add_space(12.0);
         let config = &mut self.config;
         ui.checkbox(&mut config.enabled, "Play on startup");
@@ -51,7 +51,7 @@ impl Startup {
         });
         ui.horizontal(|ui| {
             ui.label("Cursors");
-            ui.add(egui::DragValue::new(&mut config.cursor_count).range(1..=32));
+            ui.add(egui::DragValue::new(&mut config.cursor_count).range(1..=usize::MAX));
         });
         ui.horizontal(|ui| {
             ui.label("Cursor size");

@@ -11,7 +11,7 @@ use windows_sys::Win32::Graphics::Gdi::*;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
-use super::{Action, Button};
+use super::{Action, Activity, Button};
 
 fn failure(operation: &str) -> String {
     format!(
@@ -20,8 +20,15 @@ fn failure(operation: &str) -> String {
     )
 }
 
-fn check(cancel: &watch::Receiver<bool>) -> Result<(), String> {
-    if *cancel.borrow() || unsafe { GetAsyncKeyState(VK_ESCAPE as i32) } < 0 {
+pub(super) fn escape_pressed() -> bool {
+    unsafe { GetAsyncKeyState(VK_ESCAPE as i32) < 0 }
+}
+
+fn check(cancel: &watch::Receiver<bool>, activity: &Activity) -> Result<(), String> {
+    if escape_pressed() {
+        activity.stop();
+    }
+    if *cancel.borrow() || activity.snapshot().stopped {
         Err("Cancelled (Stop or Escape).".into())
     } else {
         Ok(())
@@ -55,6 +62,30 @@ fn position(x: i32, y: i32) -> Result<(), String> {
     validate_position(x, y)?;
     if unsafe { SetCursorPos(x, y) } == 0 {
         return Err(failure("Move pointer"));
+    }
+    Ok(())
+}
+
+fn move_pointer(
+    x: i32,
+    y: i32,
+    cancel: &watch::Receiver<bool>,
+    activity: &Activity,
+) -> Result<(), String> {
+    validate_position(x, y)?;
+    let mut start = windows_sys::Win32::Foundation::POINT::default();
+    if unsafe { GetCursorPos(&mut start) } == 0 {
+        return Err(failure("Read pointer"));
+    }
+    for step in 1..=18 {
+        check(cancel, activity)?;
+        let t = step as f64 / 18.0;
+        let t = t * t * (3.0 - 2.0 * t);
+        position(
+            (start.x as f64 + (x as f64 - start.x as f64) * t).round() as i32,
+            (start.y as f64 + (y as f64 - start.y as f64) * t).round() as i32,
+        )?;
+        std::thread::sleep(Duration::from_millis(10));
     }
     Ok(())
 }
@@ -164,6 +195,9 @@ pub(super) fn key_code(name: &str) -> Result<u16, String> {
 
 unsafe extern "system" fn collect_window(window: HWND, data: LPARAM) -> i32 {
     if unsafe { IsWindowVisible(window) } == 0 {
+        return 1;
+    }
+    if unsafe { GetWindowLongW(window, GWL_EXSTYLE) } as u32 & WS_EX_NOACTIVATE != 0 {
         return 1;
     }
     let mut title = [0u16; 512];
@@ -294,8 +328,9 @@ fn screenshot() -> Result<Vec<Value>, String> {
 pub(super) fn execute(
     action: Action,
     cancel: &watch::Receiver<bool>,
+    activity: &Activity,
 ) -> Result<Vec<Value>, String> {
-    check(cancel)?;
+    check(cancel, activity)?;
     match action {
         Action::Screenshot => return screenshot(),
         Action::Windows => {
@@ -323,21 +358,22 @@ pub(super) fn execute(
                 return Err("Windows declined to focus that window. Activate it manually, or take a fresh screenshot and click its visible title bar, then verify the foreground before typing.".into());
             }
         }
-        Action::Move { x, y } => position(x, y)?,
+        Action::Move { x, y } => move_pointer(x, y, cancel, activity)?,
         Action::Click {
             x,
             y,
             button,
             count,
         } => {
-            position(x, y)?;
+            move_pointer(x, y, cancel, activity)?;
             let (down, up) = match button {
                 Button::Left => (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
                 Button::Right => (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP),
                 Button::Middle => (MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP),
             };
             for _ in 0..count {
-                check(cancel)?;
+                check(cancel, activity)?;
+                activity.clicked();
                 if let Err(error) = send(&[mouse(down, 0), mouse(up, 0)]) {
                     let _ = send(&[mouse(up, 0)]);
                     return Err(error);
@@ -351,7 +387,8 @@ pub(super) fn execute(
             clicks,
             horizontal,
         } => {
-            position(x, y)?;
+            move_pointer(x, y, cancel, activity)?;
+            check(cancel, activity)?;
             send(&[mouse(
                 if horizontal {
                     MOUSEEVENTF_HWHEEL
@@ -364,7 +401,7 @@ pub(super) fn execute(
         Action::Type { text } => {
             let units: Vec<_> = text.encode_utf16().collect();
             for chunk in units.chunks(64) {
-                check(cancel)?;
+                check(cancel, activity)?;
                 let inputs: Vec<_> = chunk
                     .iter()
                     .flat_map(|unit| [key(*unit, false, true), key(*unit, true, true)])
@@ -390,11 +427,12 @@ pub(super) fn execute(
         }
         Action::Drag { x, y, to_x, to_y } => {
             validate_position(to_x, to_y)?;
-            position(x, y)?;
+            move_pointer(x, y, cancel, activity)?;
+            check(cancel, activity)?;
             send(&[mouse(MOUSEEVENTF_LEFTDOWN, 0)])?;
             let result = (|| {
                 for step in 1..=20 {
-                    check(cancel)?;
+                    check(cancel, activity)?;
                     position(
                         (x as i64 + (to_x as i64 - x as i64) * step / 20) as i32,
                         (y as i64 + (to_y as i64 - y as i64) * step / 20) as i32,

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::codex::{Approval, ProviderEvent};
@@ -10,6 +11,67 @@ mod platform;
 
 pub const TOOL_NAME: &str = "desktop_control";
 pub const SUPPORTED: bool = cfg!(windows);
+
+#[derive(Clone, Default)]
+pub struct Activity(Arc<Mutex<Feedback>>);
+
+#[derive(Clone, Copy, Default)]
+pub struct Feedback {
+    pub active: bool,
+    pub stopped: bool,
+    pub clicks: u64,
+}
+
+impl Activity {
+    pub fn snapshot(&self) -> Feedback {
+        *self.0.lock().unwrap_or_else(|error| error.into_inner())
+    }
+
+    fn begin(&self) -> Result<(), String> {
+        let mut state = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        if state.stopped {
+            return Err("Cancelled (Stop or Escape).".into());
+        }
+        state.active = true;
+        Ok(())
+    }
+
+    pub fn observe_escape(&self, pressed: bool) -> bool {
+        let mut state = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        if state.active && pressed {
+            state.stopped = true;
+            state.active = false;
+        }
+        state.stopped
+    }
+
+    fn clicked(&self) {
+        let mut state = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        state.clicks = state.clicks.wrapping_add(1);
+    }
+
+    pub fn stop(&self) {
+        let mut state = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        state.stopped = true;
+        state.active = false;
+    }
+
+    pub fn finish(&self) {
+        self.0
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .active = false;
+    }
+}
+
+pub fn escape_pressed() -> bool {
+    #[cfg(windows)]
+    {
+        platform::escape_pressed()
+    }
+    #[cfg(not(windows))]
+    false
+}
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(default)]
@@ -140,11 +202,12 @@ pub async fn execute(
     approved: &mut bool,
     sender: &mpsc::Sender<ProviderEvent>,
     mut cancel: watch::Receiver<bool>,
+    activity: &Activity,
 ) -> Result<Vec<Value>, String> {
     if !settings.enabled || !SUPPORTED {
         return Err("Desktop control is disabled or unavailable on this platform. Enable it in Settings → Workspace & access on Windows.".into());
     }
-    if *cancel.borrow() {
+    if *cancel.borrow() || activity.snapshot().stopped {
         return Err("Cancelled.".into());
     }
     let action = Action::parse(arguments)?;
@@ -164,9 +227,10 @@ pub async fn execute(
             json!({"type":"inputText","text":"Desktop input is approved for this response. No input was sent because the approval dialog may have changed the foreground window. Take a fresh screenshot, focus the target window, then retry the intended action."}),
         ]);
     }
-    if *cancel.borrow() {
+    if *cancel.borrow() || activity.snapshot().stopped {
         return Err("Cancelled.".into());
     }
+    activity.begin()?;
     sender
         .send(ProviderEvent::Status(format!(
             "Desktop · {}",
@@ -176,7 +240,8 @@ pub async fn execute(
         .map_err(|_| "Chat closed.")?;
     #[cfg(windows)]
     {
-        tokio::task::spawn_blocking(move || platform::execute(action, &cancel))
+        let activity = activity.clone();
+        tokio::task::spawn_blocking(move || platform::execute(action, &cancel, &activity))
             .await
             .map_err(|error| format!("Desktop worker stopped: {error}"))?
     }

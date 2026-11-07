@@ -4,11 +4,11 @@ use super::controls::model_label;
 use super::icons::{self, Icon};
 use super::theme::{muted, surface};
 use super::{Preferences, SettingsPage, theme};
-use crate::app::ForgeDesk;
-use forgedesk::codex;
-use forgedesk::domain::{DEFAULT_MODEL, Mode};
+use crate::app::ReDox;
+use redox::codex;
+use redox::domain::{DEFAULT_MODEL, Mode};
 
-impl ForgeDesk {
+impl ReDox {
     pub(in crate::app) fn settings(&mut self, context: &egui::Context) {
         let mut open = self.settings_open;
         let animation_was_active = self.startup.is_active();
@@ -275,7 +275,6 @@ impl ForgeDesk {
             .session
             .active()
             .and_then(|chat| chat.workspace.as_ref())
-            .or(self.session.workspace.as_ref())
         {
             ui.add(
                 egui::Label::new(RichText::new(path.display().to_string()).monospace())
@@ -283,7 +282,7 @@ impl ForgeDesk {
                     .selectable(true),
             );
         } else {
-            ui.label(RichText::new("No project selected").color(muted()));
+            ui.label(RichText::new("No project folder for this chat").color(muted()));
         }
         if ui
             .add_enabled(
@@ -325,22 +324,19 @@ impl ForgeDesk {
         }
         ui.add_space(20.0);
         ui.label(RichText::new("Desktop control").font(theme::semibold(14.0)));
-        ui.add_enabled_ui(
-            forgedesk::desktop::SUPPORTED && self.running.is_none(),
-            |ui| {
+        ui.add_enabled_ui(redox::desktop::SUPPORTED && self.running.is_none(), |ui| {
+            ui.checkbox(
+                &mut self.session.desktop.enabled,
+                "Allow Codex to see and control this desktop",
+            );
+            ui.add_enabled_ui(self.session.desktop.enabled, |ui| {
                 ui.checkbox(
-                    &mut self.session.desktop.enabled,
-                    "Allow Codex to see and control this desktop",
+                    &mut self.session.desktop.confirm_actions,
+                    "Ask before mouse and keyboard control each response",
                 );
-                ui.add_enabled_ui(self.session.desktop.enabled, |ui| {
-                    ui.checkbox(
-                        &mut self.session.desktop.confirm_actions,
-                        "Ask before mouse and keyboard control each response",
-                    );
-                });
-            },
-        );
-        ui.label(RichText::new(if forgedesk::desktop::SUPPORTED {
+            });
+        });
+        ui.label(RichText::new(if redox::desktop::SUPPORTED {
             "Codex can capture the screens, list and focus windows, click, scroll, drag, type, and press keys in other apps. Screenshots are sent to the selected Codex model. Use Stop to cancel, or hold Escape to block desktop actions. This setting is separate from project file access and applies on the next response. Local Ollama agents do not receive desktop tools."
         } else {
             "Native desktop control currently supports Windows. Other platforms retain their existing chat and project features."
@@ -374,6 +370,9 @@ impl ForgeDesk {
             "Adjust the interface without changing your chats.",
         );
         self.ui_picker(ui, "settings_ui_picker");
+        self.skin_settings(ui, context);
+        self.ui_preferences.project_glow.settings(ui);
+        ui.add_space(12.0);
         ui.label(
             RichText::new("Drop a UI JSON file or pack folder into the window to import it.")
                 .small()
@@ -511,10 +510,10 @@ impl ForgeDesk {
         ui.label(RichText::new("Connection status").font(theme::semibold(14.0)));
         ui.add(egui::Label::new(&self.status).wrap().selectable(true));
         ui.add_space(22.0);
-        ui.label(format!("Codex Rust {}", env!("CARGO_PKG_VERSION")));
+        ui.label(format!("ReDox {}", env!("CARGO_PKG_VERSION")));
         if ui.button("Copy connection details").clicked() {
             context.copy_text(format!(
-                "Codex Rust {}\nCLI: {}\nAccount: {}\nModel: {}\nStatus: {}",
+                "ReDox {}\nCLI: {}\nAccount: {}\nModel: {}\nStatus: {}",
                 env!("CARGO_PKG_VERSION"),
                 self.session.codex_path,
                 self.account,

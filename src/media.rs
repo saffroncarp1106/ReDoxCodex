@@ -87,7 +87,7 @@ fn save_inline_image(result: &str) -> Result<PathBuf, String> {
     };
     let root = dirs::data_local_dir()
         .ok_or("Local application data folder is unavailable.")?
-        .join("ForgeDesk/media");
+        .join("ReDox/media");
     std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
     let mut hash = std::collections::hash_map::DefaultHasher::new();
     bytes.hash(&mut hash);

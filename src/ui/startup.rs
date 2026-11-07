@@ -50,7 +50,7 @@ impl Config {
         self.duration_seconds = finite(self.duration_seconds, 5.5).clamp(0.8, 20.0);
         self.fade_seconds = finite(self.fade_seconds, 0.5).clamp(0.1, self.duration_seconds * 0.5);
         self.cursor_size = finite(self.cursor_size, 15.0).clamp(12.0, 42.0);
-        self.cursor_count = self.cursor_count.clamp(1, 32);
+        self.cursor_count = self.cursor_count.max(1);
         self.colors.retain(|color| parse_color(color).is_some());
         self.colors.truncate(32);
         if self.colors.is_empty() {
@@ -103,7 +103,7 @@ impl Config {
 }
 
 fn config_path() -> PathBuf {
-    if let Some(path) = std::env::var_os("CODEX_RUST_STARTUP_CONFIG") {
+    if let Some(path) = std::env::var_os("REDOX_STARTUP_CONFIG") {
         return path.into();
     }
     if let Ok(executable) = std::env::current_exe() {
@@ -129,6 +129,25 @@ pub(in crate::app) struct Startup {
 }
 
 impl Startup {
+    pub(in crate::app) fn desktop_style(&self) -> super::desktop_overlay::Style {
+        super::desktop_overlay::Style {
+            colors: self
+                .config
+                .colors
+                .iter()
+                .filter_map(|color| parse_color(color))
+                .collect(),
+            names: self
+                .config
+                .selected_names()
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+            size: self.config.cursor_size,
+            show_names: self.config.show_names,
+            show_trails: self.config.show_trails,
+        }
+    }
     pub fn new(preferences: Option<Config>) -> Self {
         let mut config = preferences.unwrap_or_else(Config::load);
         config.normalize();
@@ -499,15 +518,18 @@ fn flatten(shape: Shape, clip_rect: Rect, shapes: &mut Vec<egui::epaint::Clipped
     }
 }
 
-fn cursor(painter: &egui::Painter, tip: Pos2, size: f32, color: Color32, alpha: f32) {
-    let points = [
+pub(super) fn cursor_points(tip: Pos2, size: f32) -> [Pos2; 4] {
+    [
         vec2(0.0, 0.0),
         vec2(0.26, 0.94),
         vec2(0.47, 0.59),
         vec2(0.91, 0.43),
     ]
     .map(|point| tip + point * size)
-    .to_vec();
+}
+
+fn cursor(painter: &egui::Painter, tip: Pos2, size: f32, color: Color32, alpha: f32) {
+    let points = cursor_points(tip, size).to_vec();
     painter.add(Shape::convex_polygon(
         points,
         color,

@@ -197,7 +197,9 @@ pub fn import(session: &mut Session, page: ConversationPage, older: bool) -> Uui
         if chat.title.is_empty() {
             chat.title = "Codex conversation".into();
         }
-        chat.workspace = Some(page.entry.cwd);
+        if chat.workspace.is_some() {
+            chat.workspace = Some(page.entry.cwd);
+        }
         chat.archived = locally_archived.unwrap_or(page.archived);
         chat.messages = page.messages;
     }

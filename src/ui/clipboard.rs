@@ -1,4 +1,4 @@
-use crate::app::ForgeDesk;
+use crate::app::ReDox;
 use eframe::egui;
 
 #[derive(Default)]
@@ -54,7 +54,7 @@ impl PasteGate {
     }
 }
 
-impl ForgeDesk {
+impl ReDox {
     pub(in crate::app) fn handle_clipboard_input(
         &mut self,
         context: &egui::Context,

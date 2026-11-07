@@ -36,7 +36,7 @@ pub fn attachment_paths(payload: Payload) -> Result<Vec<PathBuf>, String> {
                 .ok_or("Invalid clipboard image pixels.")?;
             let root = dirs::data_local_dir()
                 .ok_or("Application data folder unavailable.")?
-                .join("ForgeDesk/pasted-images");
+                .join("ReDox/pasted-images");
             std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
             let path = root.join(format!("clipboard-{}.png", uuid::Uuid::new_v4()));
             image.save(&path).map_err(|error| error.to_string())?;

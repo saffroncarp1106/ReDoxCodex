@@ -1,6 +1,6 @@
 #![cfg(target_os = "macos")]
 
-use forgedesk::codex::cli_executable;
+use redox::codex::cli_executable;
 
 #[test]
 fn mac_app_paths_resolve_to_the_cli_and_reject_desktop_launchers() {

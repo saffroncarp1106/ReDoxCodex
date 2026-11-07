@@ -1,14 +1,14 @@
 use super::icons::{self, Icon};
 use super::theme::{self, border, muted, rail, sidebar, surface, text};
-use crate::app::ForgeDesk;
+use crate::app::ReDox;
 use eframe::egui::{
     self, Align, Align2, Color32, FontId, Frame, Layout, Margin, RichText, Sense, Stroke, pos2,
     vec2,
 };
-use forgedesk::domain::Mode;
+use redox::domain::Mode;
 use uuid::Uuid;
 
-impl ForgeDesk {
+impl ReDox {
     pub(in crate::app) fn title_bar(&mut self, context: &egui::Context) {
         egui::TopBottomPanel::top("window_chrome")
             .exact_height(42.0)
@@ -107,7 +107,7 @@ impl ForgeDesk {
                                 ui.menu_button(
                                     RichText::new("Help").color(theme::menu_text()),
                                     |ui| {
-                                        ui.label("Codex Rust · Native Rust client");
+                                        ui.label("ReDox · Native Rust client");
                                         ui.hyperlink_to(
                                             "Codex app-server documentation",
                                             "https://learn.chatgpt.com/docs/app-server",
@@ -317,7 +317,7 @@ impl ForgeDesk {
                         self.history_section(ui, context);
                         let query = self.search_query.to_lowercase();
                         let archived = self.show_archived;
-                        let visible = |chat: &&forgedesk::domain::Chat| {
+                        let visible = |chat: &&redox::domain::Chat| {
                             chat.archived == archived && chat.title.to_lowercase().contains(&query)
                         };
                         if self.show_archived {
@@ -355,17 +355,17 @@ impl ForgeDesk {
                                 .file_name()
                                 .unwrap_or(path.as_os_str())
                                 .to_string_lossy();
-                            if sidebar_row(ui, &name, false, 8.0, Some(Icon::Folder))
-                                .on_hover_text(path.display().to_string())
-                                .clicked()
-                            {
+                            let project = sidebar_row(ui, &name, false, 8.0, Some(Icon::Folder))
+                                .on_hover_text(path.display().to_string());
+                            self.project_drag(ui, &project, &path);
+                            if project.clicked() {
                                 self.session.workspace = Some(path.clone());
                                 if let Some(chat) = self.session.chats.iter().rev().find(|chat| {
                                     !chat.archived && chat.workspace.as_ref() == Some(&path)
                                 }) {
                                     self.session.active_chat = Some(chat.id);
                                 } else {
-                                    self.new_chat();
+                                    self.new_project_chat(path.clone());
                                 }
                             }
                             let chats: Vec<_> = self
@@ -424,9 +424,9 @@ impl ForgeDesk {
                 .iter()
                 .find(|chat| chat.id == *id)
                 .is_some_and(|chat| {
-                    chat.messages.iter().any(|message| {
-                        message.status == forgedesk::domain::MessageStatus::Streaming
-                    })
+                    chat.messages
+                        .iter()
+                        .any(|message| message.status == redox::domain::MessageStatus::Streaming)
                 });
             let (response, archive) = chat_row(
                 ui,
@@ -536,7 +536,7 @@ impl ForgeDesk {
                         .filter(|chat| chat.thread_id.as_deref() == Some(id.as_str()))
                         .any(|chat| {
                             chat.messages.iter().any(|message| {
-                                message.status == forgedesk::domain::MessageStatus::Streaming
+                                message.status == redox::domain::MessageStatus::Streaming
                             })
                         });
                     let (response, archive) = chat_row(
@@ -652,7 +652,12 @@ fn sidebar_row(
     if matches!(icon, Some(Icon::NewChat)) {
         painter.set_opacity(1.0);
     }
-    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click());
+    let sense = if matches!(icon, Some(Icon::Folder)) {
+        Sense::click_and_drag()
+    } else {
+        Sense::click()
+    };
+    let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), sense);
     if selected || response.hovered() {
         ui.painter().rect_filled(
             rect,

@@ -1,6 +1,6 @@
 # UI packs
 
-Codex Rust ships with `src/ui/layouts/codex.json` and `gemini.json`. Codex is the default. Packs change presentation; model requests still use Codex and your ChatGPT account.
+ReDox ships with `src/ui/layouts/codex.json` and `gemini.json`. Codex is the default. Packs change presentation; model requests still use Codex and your ChatGPT account.
 
 Use either a single `src/ui/layouts/ocean.json` or a folder:
 
@@ -51,7 +51,7 @@ Optional: add `"background_image": "background.png"` and include that file besid
 
 Choose UI → Reload current UI after editing the active config. Selecting or reloading a pack saves the session and restarts the process. Switching is disabled while a response, sign-in, or import is running.
 
-For portable builds, put packs under `ui/layouts/` beside the executable. `CODEX_RUST_UI_FOLDER` can point to another pack directory. Source checkouts discover `src/ui/layouts/` relative to the executable, so the launcher works from any current directory. Built-in Codex/Gemini configs remain embedded as fallbacks when external files are absent.
+For portable builds, put packs under `ui/layouts/` beside the executable. `REDOX_UI_FOLDER` can point to another pack directory. Source checkouts discover `src/ui/layouts/` relative to the executable, so the launcher works from any current directory. Built-in Codex/Gemini configs remain embedded as fallbacks when external files are absent.
 
 ## Verification
 
@@ -60,11 +60,11 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test --locked
 cargo build --locked
-.\target\debug\codex-rust.exe --screenshot temp\screenshots\gemini-home.png --ui=gemini --home-preview --startup-preview=4.2
+.\target\debug\redox.exe --screenshot temp\screenshots\gemini-home.png --ui=gemini --home-preview --startup-preview=4.2
 ```
 
 Create the screenshots folder first. Capture mode does not save changes to your session or UI preferences. `--home-preview` opens an empty chat in memory for layout verification.
 
-Debug builds also support an isolated restart check: set `CODEX_RUST_VERIFY_UI_RESTART` to a new empty directory and launch the executable. It uses a separate `state.ron`, switches from Codex to Gemini, checks draft persistence after the animation, writes `result.json`, and closes. This does not send model prompts. Clear the variable before ordinary launches.
+Debug builds also support an isolated restart check: set `REDOX_VERIFY_UI_RESTART` to a new empty directory and launch the executable. It uses a separate `state.ron`, switches from Codex to Gemini, checks draft persistence after the animation, writes `result.json`, and closes. This does not send model prompts. Clear the variable before ordinary launches.
 
 For structural changes beyond the two base layouts, edit the native presentation modules described in [UI_CUSTOMIZATION.md](UI_CUSTOMIZATION.md) and rebuild.

@@ -32,7 +32,7 @@ Start with [UI_PACKS.md](UI_PACKS.md) to add configs, choose a base layout, edit
 1. Edit colors, fonts, and shared spacing in `theme.rs`.
 2. Change icon artwork in `icons.rs`.
 3. Edit the relevant layout file for structural changes.
-4. Keep `ForgeDesk::draw_ui` as the presentation entry point, or replace its calls with your own views.
+4. Keep `ReDox::draw_ui` as the presentation entry point, or replace its calls with your own views.
 5. Run `cargo fmt`, `cargo check`, then `cargo run`.
 
 These are native Rust UI modules. Source changes require rebuilding. Authentication and model transport do not need to change for a new layout or theme.
@@ -41,11 +41,11 @@ These are native Rust UI modules. Source changes require rebuilding. Authenticat
 
 ## User preferences
 
-Interface scale and sidebar visibility are stored separately from conversation data under `codex-rust.ui.v1`. Account credentials are managed by Codex and are not stored in UI preferences. New appearance preferences belong in `Preferences` in `mod.rs`.
+Interface scale and sidebar visibility are stored separately from conversation data under `redox.ui.v1`. Account credentials are managed by Codex and are not stored in UI preferences. New appearance preferences belong in `Preferences` in `mod.rs`.
 
 **Settings → Cursor animation** manages the startup animation in either layout. Add, edit, remove, and select names; choose Classic, Pastel, Ocean, or Sunset palettes; or edit swatches and add colors for a custom palette. Selected names and colors cycle across the configured cursors. At least one nonblank name and valid color are retained. Replay applies changes immediately; startup playback can be disabled separately.
 
-Animation overrides are saved in the `startup` field of `codex-rust.ui.v1`. Before overrides exist, `startup.json` (or `CODEX_RUST_STARTUP_CONFIG`) supplies the initial configuration. Restore animation defaults loads the bundled defaults. Credits link to [Dhvanil Patel's Swarm Rebuild](https://github.com/DhvanilPatel/swarm-cursors) and [Joel Califa's original Swarm](https://califa.github.io/swarm-site/).
+Animation overrides are saved in the `startup` field of `redox.ui.v1`. Before overrides exist, `startup.json` (or `REDOX_STARTUP_CONFIG`) supplies the initial configuration. Restore animation defaults loads the bundled defaults. Credits link to [Dhvanil Patel's Swarm Rebuild](https://github.com/DhvanilPatel/swarm-cursors) and [Joel Califa's original Swarm](https://califa.github.io/swarm-site/).
 
 ## Verify a layout
 
@@ -53,26 +53,26 @@ Build first, then capture the app's own renderer:
 
 ```powershell
 cargo build --locked
-.\target\debug\codex-rust.exe --screenshot temp\screenshots\chat.png
-.\target\debug\codex-rust.exe --screenshot temp\screenshots\account.png --settings=account
-.\target\debug\codex-rust.exe --screenshot temp\screenshots\models.png --settings=models
-.\target\debug\codex-rust.exe --screenshot temp\screenshots\workspace.png --settings=workspace
-.\target\debug\codex-rust.exe --screenshot temp\screenshots\appearance.png --settings=appearance
-.\target\debug\codex-rust.exe --screenshot temp\screenshots\advanced.png --settings=advanced
-.\target\debug\codex-rust.exe --screenshot temp\screenshots\usage.png --usage
+.\target\debug\redox.exe --screenshot temp\screenshots\chat.png
+.\target\debug\redox.exe --screenshot temp\screenshots\account.png --settings=account
+.\target\debug\redox.exe --screenshot temp\screenshots\models.png --settings=models
+.\target\debug\redox.exe --screenshot temp\screenshots\workspace.png --settings=workspace
+.\target\debug\redox.exe --screenshot temp\screenshots\appearance.png --settings=appearance
+.\target\debug\redox.exe --screenshot temp\screenshots\advanced.png --settings=advanced
+.\target\debug\redox.exe --screenshot temp\screenshots\usage.png --usage
 ```
 
 To capture the startup choreography at a fixed time (in seconds), use:
 
 ```powershell
-.\target\debug\codex-rust.exe --screenshot temp\screenshots\startup.png --startup-preview=1.8
+.\target\debug\redox.exe --screenshot temp\screenshots\startup.png --startup-preview=1.8
 ```
 
 Without the preview flag, screenshot mode waits for the startup animation to finish. Do not use the preview flag for normal launches: it freezes the animation for visual verification.
 
-To verify media without a model call, create local image/GIF/video fixtures and a Markdown file linking them, then run `target/debug/codex-rust.exe --screenshot temp/screenshots/media.png --media-preview=temp/media-fixtures/preview.md`. Paths in that Markdown resolve relative to the preview file. Add `--ui=gemini` to check the other layout. This preview is only applied in screenshot mode and does not save the temporary chat.
+To verify media without a model call, create local image/GIF/video fixtures and a Markdown file linking them, then run `target/debug/redox.exe --screenshot temp/screenshots/media.png --media-preview=temp/media-fixtures/preview.md`. Paths in that Markdown resolve relative to the preview file. Add `--ui=gemini` to check the other layout. This preview is only applied in screenshot mode and does not save the temporary chat.
 
-Add `--agents` in screenshot mode to inspect the Ollama panel. It only discovers installed models; it does not run a generation. `cargo test --locked` exercises the native protocol with a local mock server, permission boundaries, approval, disconnections, provider persistence, and file/command actions. A bounded live test is opt-in: set `CODEX_RUST_OLLAMA_TEST_MODEL` to an installed model and run `cargo test --locked --lib live_local_model_smoke_test -- --ignored --nocapture`. It requests at most 16 output tokens and never downloads a model.
+Add `--agents` in screenshot mode to inspect the Ollama panel. It only discovers installed models; it does not run a generation. `cargo test --locked` exercises the native protocol with a local mock server, permission boundaries, approval, disconnections, provider persistence, and file/command actions. A bounded live test is opt-in: set `REDOX_OLLAMA_TEST_MODEL` to an installed model and run `cargo test --locked --lib live_local_model_smoke_test -- --ignored --nocapture`. It requests at most 16 output tokens and never downloads a model.
 
 Create `temp/screenshots/` before capturing. Screenshot mode uses the current local account and conversation data, waits for connection discovery and history loading, saves one frame, and closes. Keep captures in `temp/` and review their content before sharing.
 

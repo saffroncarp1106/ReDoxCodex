@@ -142,6 +142,16 @@ pub fn apply(ctx: &egui::Context) {
     fonts
         .families
         .insert(egui::FontFamily::Name("semibold".into()), bold_fonts);
+    let mut serif_fonts = fonts.families[&egui::FontFamily::Proportional].clone();
+    if let Ok(bytes) = std::fs::read(font_directory.join("georgia.ttf")) {
+        fonts
+            .font_data
+            .insert("Georgia".into(), egui::FontData::from_owned(bytes).into());
+        serif_fonts.insert(0, "Georgia".into());
+    }
+    fonts
+        .families
+        .insert(egui::FontFamily::Name("serif".into()), serif_fonts);
     ctx.set_fonts(fonts);
 
     let mut visuals = egui::Visuals::dark();

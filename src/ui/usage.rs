@@ -1,8 +1,8 @@
 use super::theme::{self, muted};
-use crate::app::ForgeDesk;
+use crate::app::ReDox;
 use eframe::egui::{self, Align, Align2, Color32, Layout, RichText, vec2};
 
-impl ForgeDesk {
+impl ReDox {
     pub(in crate::app) fn usage_dialog(&mut self, context: &egui::Context) {
         let mut open = self.usage_open;
         if self.ui_preferences.floating_windows {

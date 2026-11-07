@@ -1,35 +1,12 @@
-use eframe::egui::{self, Frame, Margin, RichText};
-use forgedesk::domain::Provider;
+use eframe::egui::{self, Frame, RichText};
+use redox::domain::Provider;
 
 use super::theme;
-use crate::app::ForgeDesk;
+use crate::app::ReDox;
 
-impl ForgeDesk {
+impl ReDox {
     pub(in crate::app) fn agents_panel(&mut self, context: &egui::Context) {
         if !self.ui_preferences.agents_open {
-            egui::SidePanel::right("agents_tab")
-                .exact_width(88.0)
-                .resizable(false)
-                .frame(
-                    Frame::NONE
-                        .fill(theme::rail())
-                        .inner_margin(Margin::symmetric(6, 12)),
-                )
-                .show(context, |ui| {
-                    if ui
-                        .add_sized(
-                            [ui.available_width(), 30.0],
-                            egui::Button::new("Agents").wrap_mode(egui::TextWrapMode::Extend),
-                        )
-                        .on_hover_text("Connect an Ollama agent")
-                        .clicked()
-                    {
-                        self.ui_preferences.agents_open = true;
-                    }
-                    if self.is_ollama() {
-                        ui.label(RichText::new("Local").small().color(theme::blue()));
-                    }
-                });
             return;
         }
         egui::SidePanel::right("agents_panel").default_width(300.0).width_range(270.0..=420.0)
@@ -152,18 +129,18 @@ impl ForgeDesk {
         }
         for (index, task) in chat.delegated_tasks.iter().rev().take(5).enumerate() {
             let status = match task.status {
-                forgedesk::delegation::Status::Running => "Running",
-                forgedesk::delegation::Status::Complete => "Complete",
-                forgedesk::delegation::Status::Failed => "Failed",
-                forgedesk::delegation::Status::Cancelled => "Cancelled",
-                forgedesk::delegation::Status::Interrupted => "Interrupted",
+                redox::delegation::Status::Running => "Running",
+                redox::delegation::Status::Complete => "Complete",
+                redox::delegation::Status::Failed => "Failed",
+                redox::delegation::Status::Cancelled => "Cancelled",
+                redox::delegation::Status::Interrupted => "Interrupted",
             };
             egui::CollapsingHeader::new(format!("{} · {status}", task.model))
                 .id_salt(&task.id)
-                .default_open(index == 0 || task.status == forgedesk::delegation::Status::Running)
+                .default_open(index == 0 || task.status == redox::delegation::Status::Running)
                 .show(ui, |ui| {
                     ui.label(&task.task);
-                    if task.status == forgedesk::delegation::Status::Running {
+                    if task.status == redox::delegation::Status::Running {
                         ui.spinner();
                         ui.label(&task.progress);
                     }

@@ -1,7 +1,7 @@
-use crate::app::ForgeDesk;
+use crate::app::ReDox;
 use eframe::egui;
 
-impl ForgeDesk {
+impl ReDox {
     pub(in crate::app) fn rename_dialog(&mut self, context: &egui::Context) {
         let mut open = self.rename_open;
         if self.ui_preferences.floating_windows {

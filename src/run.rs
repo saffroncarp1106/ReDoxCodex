@@ -6,10 +6,12 @@ use crate::codex::{self, Approval, ChatRequest, ProviderEvent};
 use crate::domain::{MessageStatus, RunId, Session};
 
 pub enum Update {
+    Feedback(uuid::Uuid, Result<(), String>),
     Delegation(crate::delegation::Event),
     Metrics(crate::ollama::Stats),
     Content(String),
     Complete,
+    Cancelled,
     Failed(String),
     Thread(String),
     Status(String),
@@ -22,9 +24,11 @@ pub struct RunEvent {
 }
 
 pub struct Running {
+    feedback: mpsc::UnboundedSender<codex::Feedback>,
     pub id: RunId,
     task: JoinHandle<()>,
     cancel: watch::Sender<bool>,
+    pub desktop_activity: crate::desktop::Activity,
 }
 
 pub enum Request {
@@ -44,6 +48,13 @@ impl Running {
         context: egui::Context,
     ) -> Self {
         let (cancel, cancellation) = watch::channel(false);
+        let (feedback, feedback_receiver) = mpsc::unbounded_channel();
+        let desktop_activity = match &request {
+            Request::Codex { request, .. } => request.desktop_activity.clone(),
+            Request::Ollama(_) => crate::desktop::Activity::default(),
+        };
+        let activity = desktop_activity.clone();
+        let stop = cancel.clone();
         let task = runtime.spawn(async move {
             let (provider_sender, mut provider_receiver) = mpsc::channel(128);
             let producer = tokio::spawn(async move {
@@ -52,8 +63,14 @@ impl Running {
                         request,
                         executable,
                     } => {
-                        codex::stream_chat(&executable, request, provider_sender, cancellation)
-                            .await
+                        codex::stream_chat_with_feedback(
+                            &executable,
+                            request,
+                            provider_sender,
+                            cancellation,
+                            feedback_receiver,
+                        )
+                        .await
                     }
                     Request::Ollama(request) => {
                         crate::ollama::stream_chat(request, provider_sender, cancellation).await
@@ -61,8 +78,24 @@ impl Running {
                 }
             });
 
-            while let Some(event) = provider_receiver.recv().await {
+            let mut escape_poll = tokio::time::interval(std::time::Duration::from_millis(8));
+            loop {
+                let event = tokio::select! {
+                    event = provider_receiver.recv() => match event {
+                        Some(event) => event,
+                        None => break,
+                    },
+                    _ = escape_poll.tick() => {
+                        if activity.observe_escape(crate::desktop::escape_pressed()) {
+                            let already_cancelled = *stop.borrow();
+                            if !already_cancelled { let _ = stop.send(true); }
+                            context.request_repaint();
+                        }
+                        continue;
+                    }
+                };
                 let update = match event {
+                    ProviderEvent::Feedback(id, result) => Update::Feedback(id, result),
                     ProviderEvent::Delegation(event) => Update::Delegation(event),
                     ProviderEvent::Metrics(stats) => Update::Metrics(stats),
                     ProviderEvent::Thread(thread) => Update::Thread(thread),
@@ -72,6 +105,8 @@ impl Running {
                 };
 
                 if sender.send(RunEvent { run: id, update }).await.is_err() {
+                    activity.stop();
+                    let _ = stop.send(true);
                     producer.abort();
                     return;
                 }
@@ -83,7 +118,11 @@ impl Running {
                 .await
                 .unwrap_or_else(|error| Err(format!("Assistant worker stopped: {error}")));
 
+            let cancelled = activity.snapshot().stopped;
+            activity.finish();
+
             let update = match result {
+                _ if cancelled => Update::Cancelled,
                 Ok(()) => Update::Complete,
                 Err(error) => Update::Failed(error),
             };
@@ -92,16 +131,28 @@ impl Running {
             context.request_repaint();
         });
 
-        Self { id, task, cancel }
+        Self {
+            feedback,
+            id,
+            task,
+            cancel,
+            desktop_activity,
+        }
     }
 
     pub fn cancel(&self) {
+        self.desktop_activity.stop();
         let _ = self.cancel.send(true);
+    }
+
+    pub fn feedback(&self, input: codex::Feedback) -> bool {
+        self.feedback.send(input).is_ok()
     }
 }
 
 impl Drop for Running {
     fn drop(&mut self) {
+        self.desktop_activity.stop();
         let _ = self.cancel.send(true);
         if self.task.is_finished() {
             self.task.abort();
@@ -115,6 +166,25 @@ pub fn apply_event(session: &mut Session, active: Option<RunId>, event: RunEvent
     }
 
     match event.update {
+        Update::Feedback(id, result) => {
+            if let Some(message) = session
+                .chats
+                .iter_mut()
+                .find(|c| c.id == event.run.chat)
+                .and_then(|chat| chat.messages.iter_mut().find(|m| m.id == id))
+            {
+                match result {
+                    Ok(()) => {
+                        message.status = MessageStatus::Complete;
+                        message.error = None;
+                    }
+                    Err(error) => {
+                        message.error = Some(format!("Queued for the next response: {error}"));
+                    }
+                }
+            }
+            false
+        }
         Update::Delegation(update) => {
             if let Some(chat) = session
                 .chats
@@ -159,6 +229,14 @@ pub fn apply_event(session: &mut Session, active: Option<RunId>, event: RunEvent
         }
         Update::Complete => {
             session.finish_run(event.run, MessageStatus::Complete, None);
+            true
+        }
+        Update::Cancelled => {
+            session.finish_run(
+                event.run,
+                MessageStatus::Cancelled,
+                Some("Cancelled (Stop or Escape). Partial response kept.".into()),
+            );
             true
         }
         Update::Failed(error) => {

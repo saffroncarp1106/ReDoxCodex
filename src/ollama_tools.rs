@@ -211,7 +211,7 @@ pub(super) async fn execute(
             if path.is_file() {
                 let backup = dirs::data_local_dir()
                     .ok_or("Application data folder unavailable.")?
-                    .join("ForgeDesk/agent-backups")
+                    .join("ReDox/agent-backups")
                     .join(uuid::Uuid::new_v4().to_string());
                 tokio::fs::create_dir_all(&backup)
                     .await

@@ -4,23 +4,23 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use eframe::egui;
-use forgedesk::attachments::{Attachment, MAX_ATTACHMENTS};
+use redox::attachments::{Attachment, MAX_ATTACHMENTS};
 
-use forgedesk::codex::{
+use redox::codex::{
     self, Approval, ChatRequest, ConnectionInfo, LoginChallenge, LoginEvent, ModelInfo,
 };
-use forgedesk::domain::{DEFAULT_MODEL, MessageStatus, Provider, Session};
-use forgedesk::history::{self, ConversationPage, HistoryEntry, HistoryPage};
-use forgedesk::ollama;
-use forgedesk::run::{self, RunEvent, Running, Update};
-use forgedesk::usage::UsageInfo;
+use redox::domain::{DEFAULT_MODEL, MessageStatus, Provider, Session};
+use redox::history::{self, ConversationPage, HistoryEntry, HistoryPage};
+use redox::ollama;
+use redox::run::{self, RunEvent, Running, Update};
+use redox::usage::UsageInfo;
 
 #[path = "ui/mod.rs"]
 mod ui;
 
 use ui::theme;
 
-const STORAGE_KEY: &str = "forgedesk.session.v1";
+const STORAGE_KEY: &str = "redox.session.v1";
 
 enum Event {
     OllamaModels(u64, String, Result<Vec<ollama::Model>, String>),
@@ -39,7 +39,8 @@ enum Event {
     CodexExecutable(Option<PathBuf>),
 }
 
-pub struct ForgeDesk {
+pub struct ReDox {
+    project_windows: Vec<ui::project_window::ProjectWindow>,
     focus_prompt: bool,
     prompt_input_id: Option<egui::Id>,
     paste_gate: ui::clipboard::PasteGate,
@@ -48,6 +49,8 @@ pub struct ForgeDesk {
     ollama_error: Option<String>,
     ollama_endpoint: Option<String>,
     ollama_generation: u64,
+    skin_editor: Option<ui::skins::Editor>,
+    skin_saved: Option<String>,
     active_ui: ui::packs::Pack,
     ui_catalog: ui::packs::Catalog,
     ui_folder: PathBuf,
@@ -57,6 +60,7 @@ pub struct ForgeDesk {
     ui_background: Option<egui::TextureHandle>,
     restart_request: std::sync::Arc<std::sync::Mutex<bool>>,
     startup: ui::startup::Startup,
+    desktop_overlay: Option<ui::desktop_overlay::Overlay>,
     history: Vec<HistoryEntry>,
     history_cursor: Option<String>,
     history_loading: bool,
@@ -104,7 +108,7 @@ pub struct ForgeDesk {
     settings_page: ui::SettingsPage,
 }
 
-impl ForgeDesk {
+impl ReDox {
     pub fn new(
         context: &eframe::CreationContext<'_>,
         capture_path: Option<PathBuf>,
@@ -161,7 +165,7 @@ impl ForgeDesk {
             .sidebars
             .get(&active_ui.id)
             .copied()
-            .unwrap_or(if active_ui.config.layout == ui::packs::Layout::Codex {
+            .unwrap_or(if active_ui.config.layout == "codex" {
                 ui_preferences.sidebar_visible
             } else {
                 active_ui.config.sidebar_default
@@ -175,9 +179,6 @@ impl ForgeDesk {
 
         session.recover();
         session.codex_path = codex::resolve_executable(&session.codex_path);
-        if session.workspace.is_none() {
-            session.workspace = std::env::current_dir().ok();
-        }
         if session.active_chat.is_none() {
             session.new_chat();
         }
@@ -202,6 +203,8 @@ impl ForgeDesk {
             ollama_error: None,
             ollama_endpoint: None,
             ollama_generation: 0,
+            skin_editor: None,
+            skin_saved: None,
             active_ui,
             ui_catalog,
             ui_folder,
@@ -211,6 +214,7 @@ impl ForgeDesk {
             ui_background,
             restart_request,
             startup: ui::startup::Startup::new(ui_preferences.startup.clone()),
+            desktop_overlay: None,
             history: Vec::new(),
             history_cursor: None,
             history_loading: false,
@@ -241,6 +245,7 @@ impl ForgeDesk {
             run_sender,
             run_receiver,
             running: None,
+            project_windows: Vec::new(),
             approval: None,
             account: "Checking ChatGPT account...".into(),
             login_receiver: None,
@@ -315,7 +320,7 @@ impl ForgeDesk {
         if let Ok(mut restart) = self.restart_request.lock() {
             *restart = true;
         }
-        context.send_viewport_cmd(egui::ViewportCommand::Close);
+        context.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Close);
     }
 
     fn refresh_history(&mut self, context: &egui::Context, append: bool) {
@@ -384,6 +389,35 @@ impl ForgeDesk {
     }
 
     fn send_prompt(&mut self, context: &egui::Context) {
+        if let Some(running) = &self.running {
+            if self.picking_files
+                || self.startup.is_active()
+                || self
+                    .session
+                    .active()
+                    .is_none_or(|chat| chat.draft.trim().is_empty() && chat.attachments.is_empty())
+            {
+                return;
+            }
+            match self.session.queue_prompt() {
+                Ok(id) => {
+                    let chat = self.session.active().unwrap();
+                    let message = chat.messages.iter().find(|m| m.id == id).unwrap();
+                    if chat.id == running.id.chat
+                        && chat.provider == Provider::Codex
+                        && running.feedback(codex::Feedback::from_message(message))
+                    {
+                        self.status = "Feedback submitted while the response continues.".into();
+                    } else {
+                        self.status = "Message queued for the next response.".into();
+                    }
+                    self.attachment_error = None;
+                    self.focus_prompt = true;
+                }
+                Err(error) => self.attachment_error = Some(error),
+            }
+            return;
+        }
         if self.startup.is_active()
             || self.running.is_some()
             || self.runtime.is_none()
@@ -440,6 +474,15 @@ impl ForgeDesk {
         };
 
         if let Some(runtime) = &self.runtime {
+            if let run::Request::Codex { request, .. } = &request
+                && request.desktop.enabled
+                && redox::desktop::SUPPORTED
+            {
+                self.desktop_overlay = Some(ui::desktop_overlay::Overlay::start(
+                    request.desktop_activity.clone(),
+                    self.startup.desktop_style(),
+                ));
+            }
             self.running = Some(Running::start(
                 runtime,
                 id,
@@ -455,16 +498,24 @@ impl ForgeDesk {
         self.approval = None;
         if let Some(running) = self.running.take() {
             running.cancel();
+            self.session.stop_queued(running.id.chat);
             self.session
                 .finish_run(running.id, MessageStatus::Cancelled, None);
             self.status = "Cancelled. Partial response kept.".into();
         }
+        self.desktop_overlay = None;
     }
 
     fn is_ollama(&self) -> bool {
         self.session
             .active()
             .is_some_and(|chat| chat.provider == Provider::Ollama)
+    }
+
+    fn active_chat_running(&self) -> bool {
+        self.running
+            .as_ref()
+            .is_some_and(|run| self.session.active_chat == Some(run.id.chat))
     }
 
     fn refresh_ollama(&mut self, context: &egui::Context) {
@@ -523,12 +574,18 @@ impl ForgeDesk {
         self.focus_prompt = true;
     }
 
+    fn new_project_chat(&mut self, workspace: PathBuf) {
+        self.session.new_project_chat(workspace);
+        self.show_archived = false;
+        self.focus_prompt = true;
+    }
+
     fn can_new_chat(&self) -> bool {
         self.show_archived
             || !self
                 .session
                 .active()
-                .is_some_and(|chat| chat.is_blank() && chat.workspace == self.session.workspace)
+                .is_some_and(|chat| chat.is_blank() && chat.workspace.is_none())
     }
 
     fn archive_local_chat(&mut self, id: uuid::Uuid, archived: bool) {
@@ -563,7 +620,7 @@ impl ForgeDesk {
             let Some(entry) = self.history.iter().find(|entry| entry.id == thread) else {
                 return;
             };
-            let mut chat = forgedesk::domain::Chat::new(Some(entry.cwd.clone()));
+            let mut chat = redox::domain::Chat::new(Some(entry.cwd.clone()));
             chat.title = entry.title();
             chat.thread_id = Some(thread.into());
             let id = chat.id;
@@ -775,7 +832,7 @@ impl ForgeDesk {
     }
 
     fn paste_clipboard_attachments(&mut self, context: &egui::Context) -> bool {
-        let payload = match forgedesk::clipboard::capture() {
+        let payload = match redox::clipboard::capture() {
             Ok(Some(payload)) => payload,
             Ok(None) => return false,
             Err(error) => {
@@ -798,7 +855,7 @@ impl ForgeDesk {
         let sender = self.sender.clone();
         let context = context.clone();
         thread::spawn(move || {
-            let result = forgedesk::clipboard::attachment_paths(payload).and_then(read_attachments);
+            let result = redox::clipboard::attachment_paths(payload).and_then(read_attachments);
             let _ = sender.send(Event::Attachments(chat_id, result));
             context.request_repaint();
         });
@@ -850,6 +907,7 @@ impl ForgeDesk {
 
             let active = self.running.as_ref().map(|running| running.id);
             let id = event.run;
+            let completed = matches!(&event.update, Update::Complete);
             let local = self
                 .session
                 .chats
@@ -859,7 +917,7 @@ impl ForgeDesk {
 
             if active == Some(id) {
                 match event.update {
-                    Update::Delegation(forgedesk::delegation::Event::Started(_)) => {
+                    Update::Delegation(redox::delegation::Event::Started(_)) => {
                         self.ui_preferences.agents_open = true;
                     }
                     Update::Approval(approval) => {
@@ -877,6 +935,7 @@ impl ForgeDesk {
 
             if run::apply_event(&mut self.session, active, event) {
                 self.running = None;
+                self.desktop_overlay = None;
                 self.approval = None;
                 self.status = self
                     .session
@@ -895,6 +954,29 @@ impl ForgeDesk {
                 }
                 if !local {
                     self.refresh_history(context, false);
+                }
+                let queued = |chat: &&redox::domain::Chat| {
+                    !chat.archived
+                        && chat
+                            .messages
+                            .iter()
+                            .any(|m| m.status == MessageStatus::Queued)
+                };
+                let next = self
+                    .session
+                    .chats
+                    .iter()
+                    .filter(queued)
+                    .find(|chat| chat.id == id.chat)
+                    .or_else(|| self.session.chats.iter().find(queued))
+                    .map(|chat| chat.id);
+                if completed && let Some(next) = next {
+                    let selected = self.session.active_chat;
+                    self.session.active_chat = Some(next);
+                    self.send_prompt(context);
+                    self.session.active_chat = selected;
+                } else if !completed {
+                    self.session.stop_queued(id.chat);
                 }
             }
         }
@@ -1071,7 +1153,7 @@ impl ForgeDesk {
                                 }
                                 self.attachment_error = None;
                             } else {
-                                self.new_chat();
+                                self.new_project_chat(path);
                             }
                         }
                         Ok(None) => {}
@@ -1092,7 +1174,7 @@ fn read_attachments(paths: Vec<PathBuf>) -> Result<Vec<Attachment>, String> {
     paths.into_iter().map(Attachment::read).collect()
 }
 
-impl eframe::App for ForgeDesk {
+impl eframe::App for ReDox {
     fn raw_input_hook(&mut self, context: &egui::Context, input: &mut egui::RawInput) {
         self.handle_clipboard_input(context, input);
     }
@@ -1107,7 +1189,7 @@ impl eframe::App for ForgeDesk {
                 .filter_map(|file| file.path.clone())
                 .collect::<Vec<_>>()
         });
-        if !dropped.is_empty() {
+        if !dropped.is_empty() && !self.skin_picture_drop(&dropped, context) {
             self.import_ui(Some(dropped), context);
         }
         if self.ui_scanned.elapsed() > Duration::from_secs(3) {
@@ -1169,7 +1251,7 @@ impl eframe::App for ForgeDesk {
     }
 }
 
-impl Drop for ForgeDesk {
+impl Drop for ReDox {
     fn drop(&mut self) {
         self.stop_response();
         if let Some(task) = self.login_task.take() {

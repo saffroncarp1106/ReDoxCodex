@@ -1,4 +1,124 @@
 use super::*;
+use egui::{Align, Layout};
+
+#[test]
+fn select_effort_keeps_button_and_panel_fixed_after_model_changes() {
+    let context = egui::Context::default();
+    let mut initial = None;
+    for frame in 0..6 {
+        let output = context.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(900.0, 700.0),
+                )),
+                ..Default::default()
+            },
+            |context| {
+                egui::CentralPanel::default().show(context, |ui| {
+                    ui.add_space(450.0);
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let summary = if frame < 3 {
+                            "Sol · Low"
+                        } else {
+                            "A much longer model name · Extra high"
+                        };
+                        let button = effort_button(ui, summary);
+                        if frame == 0 {
+                            egui::Popup::open_id(
+                                context,
+                                egui::Popup::default_response_id(&button),
+                            );
+                        }
+                        let panel = model_effort_popup(&button)
+                            .show(|ui| {
+                                ui.set_width(230.0);
+                                effort_header(
+                                    ui,
+                                    if frame < 3 { "Low" } else { "Extra high" },
+                                    true,
+                                );
+                                let mut current = summary.to_string();
+                                model_choices(
+                                    ui,
+                                    "model",
+                                    &mut current,
+                                    &[(summary.into(), summary.into())],
+                                );
+                                ui.is_sizing_pass()
+                            })
+                            .unwrap();
+                        if !panel.inner {
+                            remember_effort_position(&button, panel.response.rect.min);
+                        }
+                        let geometry = (button.rect, panel.response.rect.min);
+                        if frame == 2 {
+                            initial = Some(geometry);
+                        }
+                        if frame >= 3 {
+                            assert_eq!(geometry, initial.unwrap());
+                        }
+                    });
+                });
+            },
+        );
+        if frame >= 2 {
+            assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,egui::Shape::Text(text) if text.galley.text()=="Select effort")));
+        }
+    }
+}
+
+#[test]
+fn open_panel_keeps_its_position_when_the_model_button_changes_width() {
+    let context = egui::Context::default();
+    let mut initial = None;
+    for frame in 0..6 {
+        let _ = context.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    vec2(900.0, 700.0),
+                )),
+                ..Default::default()
+            },
+            |context| {
+                egui::CentralPanel::default().show(context, |ui| {
+                    ui.add_space(450.0);
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        let label = if frame < 3 {
+                            "Short · Low"
+                        } else {
+                            "A much longer model name · Extra high"
+                        };
+                        let button = ui.button(label);
+                        if frame == 0 {
+                            egui::Popup::open_id(
+                                context,
+                                egui::Popup::default_response_id(&button),
+                            );
+                        }
+                        let panel = model_effort_popup(&button)
+                            .show(|ui| {
+                                ui.set_width(230.0);
+                                ui.label("Model and effort");
+                                ui.is_sizing_pass()
+                            })
+                            .unwrap();
+                        if !panel.inner {
+                            remember_effort_position(&button, panel.response.rect.min);
+                        }
+                        if frame == 2 {
+                            initial = Some(panel.response.rect.min);
+                        }
+                        if frame >= 3 {
+                            assert_eq!(panel.response.rect.min, initial.unwrap());
+                        }
+                    });
+                });
+            },
+        );
+    }
+}
 
 #[test]
 fn model_list_stays_open_inside_a_centered_effort_panel() {

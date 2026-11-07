@@ -5,14 +5,6 @@ use serde::{Deserialize, Serialize};
 
 use super::theme;
 
-#[derive(Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Layout {
-    #[default]
-    Codex,
-    Gemini,
-}
-
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Colors {
@@ -32,7 +24,7 @@ pub struct Colors {
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub name: String,
-    pub layout: Layout,
+    pub layout: String,
     pub heading: String,
     pub placeholder: String,
     pub palette: Colors,
@@ -41,13 +33,14 @@ pub struct Config {
     pub glow_strength: f32,
     pub sidebar_default: bool,
     pub background_image: Option<String>,
+    pub background_opacity: f32,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             name: "Custom".into(),
-            layout: Layout::Codex,
+            layout: "codex".into(),
             heading: "What can I help with?".into(),
             placeholder: "Ask anything".into(),
             palette: Colors::default(),
@@ -56,6 +49,7 @@ impl Default for Config {
             glow_strength: 0.6,
             sidebar_default: true,
             background_image: None,
+            background_opacity: 1.0,
         }
     }
 }
@@ -73,7 +67,7 @@ pub struct Catalog {
 }
 
 pub fn root() -> PathBuf {
-    if let Some(path) = std::env::var_os("CODEX_RUST_UI_FOLDER") {
+    if let Some(path) = std::env::var_os("REDOX_UI_FOLDER") {
         return path.into();
     }
     if let Ok(executable) = std::env::current_exe()
@@ -120,26 +114,11 @@ impl Config {
         }
         self.colors()?;
         color(&self.glow)?;
+        if !self.background_opacity.is_finite() || !(0.0..=1.0).contains(&self.background_opacity) {
+            return Err("Background opacity must be between 0 and 1.".into());
+        }
         if let Some(asset) = &self.background_image {
-            let asset = asset_path(path, asset)?;
-            if asset.extension().and_then(|ext| ext.to_str()) != Some("png") {
-                return Err("UI background images must be PNG files.".into());
-            }
-            let bytes = std::fs::read(asset).map_err(|error| error.to_string())?;
-            if bytes.len() > 8 * 1024 * 1024 {
-                return Err("UI background exceeds 8 MiB.".into());
-            }
-            let (width, height) = image::ImageReader::with_format(
-                std::io::Cursor::new(&bytes),
-                image::ImageFormat::Png,
-            )
-            .into_dimensions()
-            .map_err(|error| error.to_string())?;
-            if width > 4096 || height > 4096 {
-                return Err("UI background must be at most 4096 × 4096.".into());
-            }
-            image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
-                .map_err(|error| error.to_string())?;
+            load_background(&asset_path(path, asset)?)?;
         }
         Ok(())
     }
@@ -208,13 +187,11 @@ pub fn read(path: &Path) -> Result<Config, String> {
 pub fn discover(directory: &Path) -> Catalog {
     let mut packs = Vec::new();
     let mut errors = Vec::new();
-    for (id, source) in [
-        ("codex", include_str!("layouts/codex.json")),
-        ("gemini", include_str!("layouts/gemini.json")),
-    ] {
+    for renderer in super::renderers::RENDERERS {
+        let id = renderer.id;
         packs.push(Pack {
             id: id.into(),
-            config: serde_json::from_str(source).expect("Built-in UI config"),
+            config: serde_json::from_str(renderer.config).expect("Built-in UI config"),
             path: directory.join(format!("{id}.json")),
         });
     }
@@ -266,7 +243,43 @@ pub fn install(source: &Path, directory: &Path) -> Result<String, String> {
     } else {
         source.to_owned()
     };
-    let mut config = read(&source)?;
+    let config = read(&source)?;
+    let image = config
+        .background_image
+        .as_deref()
+        .map(|asset| asset_path(&source, asset))
+        .transpose()?;
+    save(&config, image.as_deref(), directory)
+}
+
+pub fn save(config: &Config, image: Option<&Path>, directory: &Path) -> Result<String, String> {
+    let mut config = config.clone();
+    config.background_image = None;
+    config.validate(&directory.join("ui.json"))?;
+    let background = image.map(load_background).transpose()?;
+    let background = background
+        .map(|image| {
+            let mut bytes = std::io::Cursor::new(Vec::new());
+            image
+                .write_to(&mut bytes, image::ImageFormat::Png)
+                .map_err(|error| error.to_string())?;
+            let bytes = bytes.into_inner();
+            if bytes.len() > 8 * 1024 * 1024 {
+                return Err(
+                    "This picture exceeds 8 MiB after conversion. Choose a smaller picture."
+                        .to_owned(),
+                );
+            }
+            Ok(bytes)
+        })
+        .transpose()?;
+    if background.is_some() {
+        config.background_image = Some("background.png".into());
+    }
+    let config_bytes = serde_json::to_vec_pretty(&config).map_err(|error| error.to_string())?;
+    if config_bytes.len() > 64 * 1024 {
+        return Err("UI config exceeds 64 KiB.".into());
+    }
     std::fs::create_dir_all(directory).map_err(|error| error.to_string())?;
     let slug: String = config
         .name
@@ -288,25 +301,49 @@ pub fn install(source: &Path, directory: &Path) -> Result<String, String> {
     let mut suffix = 1;
     while directory.join(&id).exists()
         || directory.join(format!("{id}.json")).exists()
-        || ["codex", "gemini"].contains(&id.as_str())
+        || super::renderers::RENDERERS
+            .iter()
+            .any(|renderer| renderer.id == id)
     {
         id = format!("{slug}-{suffix}");
         suffix += 1;
     }
     let destination = directory.join(&id);
     std::fs::create_dir(&destination).map_err(|error| error.to_string())?;
-    if let Some(asset) = &config.background_image {
-        let asset = asset_path(&source, asset)?;
-        std::fs::copy(asset, destination.join("background.png"))
+    if let Some(background) = background {
+        std::fs::write(destination.join("background.png"), background)
             .map_err(|error| error.to_string())?;
-        config.background_image = Some("background.png".into());
     }
-    std::fs::write(
-        destination.join("ui.json"),
-        serde_json::to_vec_pretty(&config).map_err(|error| error.to_string())?,
-    )
-    .map_err(|error| error.to_string())?;
+    std::fs::write(destination.join("ui.json"), config_bytes).map_err(|error| error.to_string())?;
     Ok(id)
+}
+
+pub fn load_background(path: &Path) -> Result<image::DynamicImage, String> {
+    let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+    if file.metadata().map_err(|error| error.to_string())?.len() > 8 * 1024 * 1024 {
+        return Err("Choose a picture smaller than 8 MiB.".into());
+    }
+    let reader = image::ImageReader::new(std::io::BufReader::new(file))
+        .with_guessed_format()
+        .map_err(|error| error.to_string())?;
+    if !matches!(
+        reader.format(),
+        Some(
+            image::ImageFormat::Png
+                | image::ImageFormat::Jpeg
+                | image::ImageFormat::WebP
+                | image::ImageFormat::Gif
+        )
+    ) {
+        return Err("Choose a PNG, JPEG, WebP, or GIF picture.".into());
+    }
+    let (width, height) = reader
+        .into_dimensions()
+        .map_err(|error| error.to_string())?;
+    if width == 0 || height == 0 || width > 4096 || height > 4096 {
+        return Err("Choose a picture up to 4096 x 4096 pixels.".into());
+    }
+    image::open(path).map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
-use crate::app::ForgeDesk;
+use crate::app::ReDox;
 use eframe::egui::{self, RichText};
 
-impl ForgeDesk {
+impl ReDox {
     pub(in crate::app) fn ui_drop_hint(&self, context: &egui::Context) {
         if context.input(|input| !input.raw.hovered_files.is_empty()) {
             egui::Area::new(egui::Id::new("ui_config_drop_hint"))
@@ -11,7 +11,11 @@ impl ForgeDesk {
                     egui::Frame::popup(ui.style())
                         .inner_margin(24)
                         .show(ui, |ui| {
-                            ui.heading("Drop UI config or pack folder");
+                            ui.heading(if self.skin_editor.is_some() {
+                                "Drop a background picture or UI pack"
+                            } else {
+                                "Drop UI config or pack folder"
+                            });
                             ui.label("Import it, then choose it from the UI menu.");
                         });
                 });
@@ -39,6 +43,7 @@ impl ForgeDesk {
                 .show_ui(ui,|ui| {
                     for (id,name) in available {ui.selectable_value(&mut selected,id,name);}
                     ui.separator();
+                    if ui.button("Create skin...").clicked() {self.begin_skin(ui.ctx());ui.close();}
                     if ui.button("Custom… Import config").clicked() {self.import_ui(None,ui.ctx());ui.close();}
                     if ui.button("Reload current UI").clicked() {self.switch_ui(&current,ui.ctx());ui.close();}
                     if ui.button("Refresh UI folder").clicked() {self.scan_ui();ui.close();}
