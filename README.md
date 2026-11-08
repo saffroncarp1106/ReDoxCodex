@@ -1,4 +1,4 @@
-# ReDoxCodex
+   vvff# ReDoxCodex
 A front-end rewrite for rust because 1.2g of ram for a basic ui window is ridiculous.
 
 Redox: A reaction where both reduction and oxidation occurs. The process of Oxidation, is the lose of an electron, the project was aimed to rewrite Codex to no longer use Electron and instead Rust, ironically when Iron oxidizes, it Rusts. Technically a redox reaction needs a reduction, which we have by reducing ram consumption by 10x, so use the free memory for an Ollama model!
