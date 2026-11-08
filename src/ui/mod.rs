@@ -48,6 +48,7 @@ pub(super) fn request_animation_frame(context: &egui::Context) {
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub(super) struct Preferences {
+    pub hide_update_prompts: bool,
     pub codex_mode: bool,
     pub project_glow: project_window::Glow,
     pub text_colors: std::collections::BTreeMap<String, theme::TextColors>,
@@ -65,6 +66,7 @@ pub(super) struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
+            hide_update_prompts: false,
             codex_mode: false,
             project_glow: project_window::Glow::default(),
             text_colors: std::collections::BTreeMap::new(),

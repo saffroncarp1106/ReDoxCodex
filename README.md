@@ -4,7 +4,7 @@ A front-end rewrite for rust because 1.2g of ram for a basic ui window is ridicu
 Redox: A reaction where both reduction and oxidation occurs. The process of Oxidation, is the lose of an electron, the project was aimed to rewrite Codex to no longer use Electron and instead Rust, ironically when Iron oxidizes, it Rusts. Technically a redox reaction needs a reduction, which we have by reducing ram consumption by 10x, so use the free memory for an Ollama model!
 
 ## Run
-On Windows, open `Launch ReDox.cmd` to build and start the app. Rust and the Visual Studio C++ build tools are required.
+On Windows, open `Launch ReDox.cmd` to start the existing executable, or build it if none exists. Rust and the Visual Studio C++ build tools are required.
 
 On macOS or Linux, with Rust and the native platform build dependencies installed, run `cargo run --locked --bin redox`.
 
@@ -76,12 +76,24 @@ cargo build --locked
 ```
 
 
-Open **Settings ? Updates** and click **Check for updates** to check GitHub for a
-newer stable release. The page shows the installed version, progress, and result.
-When an update is available, **View release and download** opens its GitHub page.
-Downloads and installation remain manual. Checks run only when requested and use
-a ten-second timeout. Release tags must use `vMAJOR.MINOR.PATCH` or
-`MAJOR.MINOR.PATCH`; update Cargo.toml for each release.
+ReDox checks for updates at startup and offers **Yes** (download and restart) or
+**No** when a newer release is available. **Never show again** is saved and can
+be changed in **Settings ? Updates**, where manual checks and **Update and restart**
+remain available. Private releases require `REDOX_UPDATE_TOKEN`.
+
+On Windows, updates download the release asset named `ReDox-Windows-x64.exe`
+and replace the running executable in its current folder without rebuilding.
+The generated helper is `<executable folder>/temp/update-<id>/update.ps1`.
+It waits for ReDox to exit, preserves `redox-previous.exe` there, replaces the
+executable, and restarts it. Replacement failures restore the backup; helper
+errors are recorded in `update-error.txt` in the same directory. The installation
+folder must be writable. Chats and settings remain in application storage.
+Updates wait until the current response finishes before closing the application.
+Other platforms can use **View release and download**.
+
+The launcher uses existing executables; run `Build Release.bat` explicitly after
+source changes. Release tags must use `vMAJOR.MINOR.PATCH` or `MAJOR.MINOR.PATCH`.
+A test tag must include the compiled Windows asset to support installation.
 
 The default update repository is `saffroncarp1106/ReDoxCodex`.
 `REDOX_UPDATE_REPOSITORY` optionally overrides it. For private releases, set

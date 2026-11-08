@@ -1,6 +1,6 @@
 [package]
 name = "redox"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 rust-version = "1.88"
 description = "A native Rust desktop workspace for local coding assistants"
