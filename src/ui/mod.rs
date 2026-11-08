@@ -105,6 +105,7 @@ pub(super) enum SettingsPage {
     Appearance,
     Cursors,
     Advanced,
+    Updates,
     About,
 }
 

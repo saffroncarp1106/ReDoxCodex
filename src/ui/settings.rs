@@ -8,13 +8,14 @@ use crate::app::ReDox;
 use redox::codex;
 use redox::domain::{DEFAULT_MODEL, Mode};
 
-const SETTINGS_PAGES: [(SettingsPage, &str); 7] = [
+const SETTINGS_PAGES: [(SettingsPage, &str); 8] = [
     (SettingsPage::Account, "Account"),
     (SettingsPage::Models, "Models & reasoning"),
     (SettingsPage::Workspace, "Workspace & access"),
     (SettingsPage::Appearance, "Appearance"),
     (SettingsPage::Cursors, "Cursor animation"),
     (SettingsPage::Advanced, "Advanced"),
+    (SettingsPage::Updates, "Updates"),
     (SettingsPage::About, "About"),
 ];
 
@@ -309,6 +310,7 @@ impl ReDox {
                             }
                         }
                         SettingsPage::Advanced => self.advanced_settings(ui, context),
+                        SettingsPage::Updates => self.updates_settings(ui),
                         SettingsPage::About => self.about_settings(ui),
                     }
                 });

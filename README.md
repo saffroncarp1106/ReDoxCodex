@@ -76,13 +76,12 @@ cargo build --locked
 ```
 
 
-ReDox checks for a newer stable GitHub release once at startup when
-`REDOX_UPDATE_REPOSITORY` is set to `owner/repository` (or its GitHub HTTPS URL).
-The check runs in the background with a ten-second timeout. A newer release
-prompts you to open its GitHub release page to download the update, or choose
-Later. Downloads and installation remain manual. Unavailable releases and
-network failures do not interrupt startup. Release tags must use `vMAJOR.MINOR.PATCH`
-or `MAJOR.MINOR.PATCH`; update the package version in Cargo.toml for each release.
+Open **Settings ? Updates** and click **Check for updates** to check GitHub for a
+newer stable release. The page shows the installed version, progress, and result.
+When an update is available, **View release and download** opens its GitHub page.
+Downloads and installation remain manual. Checks run only when requested and use
+a ten-second timeout. Release tags must use `vMAJOR.MINOR.PATCH` or
+`MAJOR.MINOR.PATCH`; update Cargo.toml for each release.
 
 The default update repository is `saffroncarp1106/ReDoxCodex`.
 `REDOX_UPDATE_REPOSITORY` optionally overrides it. For private releases, set

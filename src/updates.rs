@@ -9,15 +9,20 @@ pub struct Release {
 
 #[derive(Default)]
 pub struct Updates {
-    started: bool,
+    pub status: String,
     pending: Option<Receiver<Option<Release>>>,
     pub available: Option<Release>,
 }
 
 impl Updates {
-    pub fn poll(&mut self, repaint: impl FnOnce() + Send + 'static) {
-        if !self.started {
-            self.started = true;
+    pub fn checking(&self) -> bool {
+        self.pending.is_some()
+    }
+
+    pub fn check(&mut self, repaint: impl FnOnce() + Send + 'static) {
+        if self.pending.is_none() {
+            self.available = None;
+            self.status = "Checking for updates?".into();
             let repository = std::env::var("REDOX_UPDATE_REPOSITORY")
                 .unwrap_or_else(|_| "saffroncarp1106/ReDoxCodex".into());
             let repository = repository
@@ -28,6 +33,7 @@ impl Updates {
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || "-_/ .".replace(' ', "").contains(c))
             {
+                self.status = "Invalid update repository.".into();
                 return;
             }
             let endpoint = format!("https://api.github.com/repos/{repository}/releases/latest");
@@ -60,12 +66,23 @@ impl Updates {
                 repaint();
             });
         }
+    }
+
+    pub fn poll(&mut self) {
         if let Some(receiver) = &self.pending {
             if let Ok(release) = receiver.try_recv() {
+                self.status = if release.is_some() {
+                    "You are up to date."
+                } else {
+                    "Could not check for updates. Check your connection and repository access. Private repositories require REDOX_UPDATE_TOKEN."
+                }.into();
                 self.available = release.filter(|release| {
                     newer(&release.tag_name, env!("CARGO_PKG_VERSION"))
                         && release.html_url.starts_with("https://github.com/")
                 });
+                if self.available.is_some() {
+                    self.status = "An update is available.".into();
+                }
                 self.pending = None;
             }
         }
