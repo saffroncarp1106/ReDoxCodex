@@ -19,13 +19,14 @@ const SETTINGS_PAGES: [(SettingsPage, &str); 8] = [
     (SettingsPage::About, "About"),
 ];
 
-const SETTINGS_ICONS: [Icon; 7] = [
+const SETTINGS_ICONS: [Icon; SETTINGS_PAGES.len()] = [
     Icon::Home,
     Icon::Bolt,
     Icon::Shield,
     Icon::Grid,
     Icon::Reticle,
     Icon::Settings,
+    Icon::Bolt,
     Icon::Chat,
 ];
 
@@ -226,6 +227,7 @@ impl ReDox {
                             "Appearance",
                             "Cursors",
                             "Advanced",
+                            "Updates",
                             "About",
                         ]) {
                             let selected = self.settings_page == page;

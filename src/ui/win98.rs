@@ -302,8 +302,8 @@ impl ReDox {
                 self.win98_caption(ui, context, true);
                 Frame::NONE
                     .inner_margin(Margin {
-                        left: 4,
-                        right: 4,
+                        left: 11,
+                        right: 10,
                         top: 7,
                         bottom: 0,
                     })
@@ -311,7 +311,12 @@ impl ReDox {
                         ui.allocate_ui_with_layout(
                             vec2(ui.available_width(), 30.0),
                             Layout::left_to_right(Align::Center),
-                            |ui| self.main_menus(ui, context),
+                            |ui| {
+                                self.main_menus(ui, context);
+                                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                    self.title_ui_picker(ui);
+                                });
+                            },
                         );
                     });
             });

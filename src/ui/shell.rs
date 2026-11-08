@@ -32,12 +32,13 @@ impl ReDox {
                     }
                     ui.add_space(14.0);
                     self.main_menus(ui, context);
-                    let drag_width = (ui.available_width() - 108.0).max(0.0);
+                    let drag_width = (ui.available_width() - 290.0).max(0.0);
                     let (_, drag) =
                         ui.allocate_exact_size(vec2(drag_width, 30.0), Sense::click_and_drag());
                     super::window_frame::title_drag(context, &drag);
 
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        self.title_ui_picker(ui);
                         if icons::button(ui, Icon::Close, "Close window").clicked() {
                             context.send_viewport_cmd(egui::ViewportCommand::Close);
                         }
@@ -130,6 +131,10 @@ impl ReDox {
                 });
             },
         );
+    }
+
+    pub(super) fn title_ui_picker(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(8.0);
         ui.scope(|ui| {
             ui.visuals_mut().override_text_color = Some(theme::menu_text());
             self.ui_picker(ui, "title_ui_picker");
@@ -370,9 +375,17 @@ impl ReDox {
                                 self.project_drag(ui, &project, &path);
                                 if project.clicked() {
                                     self.session.workspace = Some(path.clone());
-                                    if let Some(chat) =
-                                        self.session.chats.iter().rev().find(|chat| {
+                                    if let Some(chat) = self
+                                        .session
+                                        .active()
+                                        .filter(|chat| {
                                             !chat.archived && chat.workspace.as_ref() == Some(&path)
+                                        })
+                                        .or_else(|| {
+                                            self.session.chats.iter().rev().find(|chat| {
+                                                !chat.archived
+                                                    && chat.workspace.as_ref() == Some(&path)
+                                            })
                                         })
                                     {
                                         self.session.active_chat = Some(chat.id);
@@ -523,7 +536,15 @@ impl ReDox {
             .map(|entry| {
                 (
                     entry.id.clone(),
-                    entry.title(),
+                    format!(
+                        "[{}] {}",
+                        entry
+                            .cwd
+                            .file_name()
+                            .unwrap_or(entry.cwd.as_os_str())
+                            .to_string_lossy(),
+                        entry.title()
+                    ),
                     entry.cwd.display().to_string(),
                 )
             })

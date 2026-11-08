@@ -4,7 +4,7 @@ A front-end rewrite for rust because 1.2g of ram for a basic ui window is ridicu
 Redox: A reaction where both reduction and oxidation occurs. The process of Oxidation, is the lose of an electron, the project was aimed to rewrite Codex to no longer use Electron and instead Rust, ironically when Iron oxidizes, it Rusts. Technically a redox reaction needs a reduction, which we have by reducing ram consumption by 10x, so use the free memory for an Ollama model!
 
 ## Run
-On Windows, open `Launch ReDox.cmd` to start the existing executable, or build it if none exists. Rust and the Visual Studio C++ build tools are required.
+On Windows, open `Launch ReDox.cmd` to rebuild changed project files and then start the updated release executable. Cargo skips unchanged work. Use `Launch ReDox.cmd --debug` for a debug build. A failed build stops the launcher instead of starting an older executable. This uses local source files and does not download source updates. Rust and the Visual Studio C++ build tools are required.
 
 On macOS or Linux, with Rust and the native platform build dependencies installed, run `cargo run --locked --bin redox`.
 
@@ -103,3 +103,5 @@ saved in application settings. Git credential-manager access alone does not
 authenticate the updater's GitHub API request.
 
 Replying to a conversation imported from Codex history creates a separate ReDox chat with the loaded conversation context. The original history remains separate.
+
+Loaded Codex history chats also appear under their project folders. History rows include the project folder name; use Load more chats to discover older conversations.

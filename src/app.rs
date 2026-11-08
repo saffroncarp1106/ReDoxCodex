@@ -1052,6 +1052,22 @@ impl ReDox {
                                 self.history.clear();
                             }
                             for entry in page.data {
+                                if !self.session.chats.iter().any(|chat| {
+                                    chat.thread_id.as_deref() == Some(entry.id.as_str())
+                                }) {
+                                    let mut chat =
+                                        redox::domain::Chat::new(Some(entry.cwd.clone()));
+                                    chat.imported_history = true;
+                                    chat.thread_id = Some(entry.id.clone());
+                                    chat.title = entry.title();
+                                    chat.archived = self
+                                        .session
+                                        .local_archive_overrides
+                                        .get(&entry.id)
+                                        .copied()
+                                        .unwrap_or(self.show_archived);
+                                    self.session.chats.insert(0, chat);
+                                }
                                 self.history.retain(|old| old.id != entry.id);
                                 self.history.push(entry);
                             }
