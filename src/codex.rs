@@ -585,7 +585,10 @@ pub enum ProviderEvent {
     Metrics(crate::ollama::Stats),
     Thread(String),
     Content(String),
-    ReplaceContent { offset: usize, text: String },
+    ReplaceContent {
+        offset: usize,
+        text: String,
+    },
     Status(String),
     Approval(Approval),
 }

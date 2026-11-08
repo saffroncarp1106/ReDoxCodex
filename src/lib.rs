@@ -9,4 +9,5 @@ pub mod history;
 pub mod media;
 pub mod ollama;
 pub mod run;
+pub mod updates;
 pub mod usage;

@@ -93,6 +93,8 @@ pub struct RunId {
 
 #[derive(Deserialize, Serialize)]
 pub struct Chat {
+    #[serde(default)]
+    pub imported_history: bool,
     #[serde(skip)]
     pub send_after: BTreeMap<Uuid, Instant>,
     #[serde(default)]
@@ -143,6 +145,7 @@ impl Chat {
             Mode::Chat
         };
         Self {
+            imported_history: false,
             send_after: BTreeMap::new(),
             desktop_tools: false,
             delegation_tools: false,
@@ -431,6 +434,19 @@ impl Session {
     }
 
     pub fn prepare_selected_run(&mut self, queued: Option<Uuid>) -> Result<RunId, String> {
+        if self.active().is_some_and(|chat| chat.imported_history) {
+            let source = self.active_mut().unwrap();
+            let mut branch = Chat::new(source.workspace.clone());
+            branch.title = format!("Branch ? {}", source.title);
+            branch.messages = source.messages.clone();
+            branch.mode = source.mode;
+            branch.provider = source.provider;
+            branch.draft = std::mem::take(&mut source.draft);
+            branch.attachments = std::mem::take(&mut source.attachments);
+            branch.send_after = std::mem::take(&mut source.send_after);
+            self.active_chat = Some(branch.id);
+            self.chats.push(branch);
+        }
         let desktop = self.desktop.enabled && crate::desktop::SUPPORTED;
         if let Some(chat) = self.active_mut()
             && chat.provider == Provider::Codex

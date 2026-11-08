@@ -33,9 +33,9 @@ To Do:
 
 ## Ollama agents
 
-Open the **Agents** tab on the right, connect to your Ollama server (default `http://127.0.0.1:11434`), and choose an installed model such as Qwen. **Use for this chat** hands the conversation to that model; **New agent chat** starts a separate local chat. **Switch this chat to Codex** returns to the account provider. New chats inherit the active provider and local model. The server, preferred model, agent instructions, per-chat provider, and token usage persist across restarts.
+Open **Agents** on the right, connect to your Ollama server (default `http://127.0.0.1:11434`), and choose an installed model such as Qwen. **Use for this chat** hands the conversation to that model. **New agent chat** starts a separate local chat, and **Switch to Codex** returns to the account provider. New chats inherit the active provider and local model. The server, preferred model, agent instructions, per-chat provider, and token usage persist across restarts.
 
-To keep Codex in charge, enable **Let Codex delegate to this agent**. Codex receives a native `delegate_to_ollama` tool and can command the selected worker using the current project and access mode. Ask for delegation in the main chat, or type a task in Agents and click **Ask Codex to delegate**. Progress and worker output appear at the top of Agents, and the worker result returns to Codex for review and the final response. Task logs survive restart; Stop cancels the parent run and its worker. File changes still use the existing approval flow. Existing Codex conversations without the tool start a fresh server thread while retaining the visible transcript. Each Codex turn is limited to eight delegations. Ollama worker tokens are counted in the panel; Codex orchestration and review still use Codex quota.
+To keep Codex in charge, enable **Let Codex delegate to Ollama**. Codex receives a native `delegate_to_ollama` tool and can command the selected worker using the current project and access mode. Ask for delegation in the main chat, or type a task in Agents and click **Ask Codex to delegate**. Progress appears at the top of Agents. Expand a task to see its output. The worker result returns to Codex for review and the final response. Task logs survive restart. Stop cancels the parent run and its worker. File changes still use the existing approval flow. Existing Codex conversations without the tool start a fresh server thread while retaining the visible transcript. Each Codex turn is limited to eight delegations. Ollama worker tokens are counted in the panel. Codex orchestration and review still use Codex quota.
 
 Ollama responses stream directly into the normal conversation in either layout. The composer identifies the local model, and the Agents panel shows input/output tokens, request counts, and generation speed. Local Ollama calls do not consume Codex account quota; a remote or cloud-backed Ollama model may have its own provider usage. No models are installed or downloaded by the application.
 
@@ -51,7 +51,7 @@ This continuation path is covered by mock Ollama transport tests and can be buil
 
 The integration uses Ollama's native [model list](https://docs.ollama.com/api/tags), [streaming chat API](https://docs.ollama.com/api/chat), and [tool calling](https://docs.ollama.com/capabilities/tool-calling). Ollama transport, progress checkpoints, and project actions are in `src/ollama.rs`, `src/ollama_state.rs`, and `src/ollama_tools.rs`; the panel is in `src/ui/agents.rs`.
 
-If Ollama reports a CUDA/GPU initialization failure, enable **CPU only (GPU troubleshooting)** in Agents and retry. This sets `num_gpu: 0` for the request; CPU generation can be slower.
+If Ollama reports a CUDA/GPU initialization failure, open **Model & tool options** in Agents, enable **CPU only (GPU troubleshooting)**, and retry. This sets `num_gpu: 0` for the request. CPU generation can be slower.
 
 ## Cursor animation
 
@@ -75,3 +75,20 @@ cargo clippy --all-targets -- -D warnings
 cargo build --locked
 ```
 
+
+ReDox checks for a newer stable GitHub release once at startup when
+`REDOX_UPDATE_REPOSITORY` is set to `owner/repository` (or its GitHub HTTPS URL).
+The check runs in the background with a ten-second timeout. A newer release
+prompts you to open its GitHub release page to download the update, or choose
+Later. Downloads and installation remain manual. Unavailable releases and
+network failures do not interrupt startup. Release tags must use `vMAJOR.MINOR.PATCH`
+or `MAJOR.MINOR.PATCH`; update the package version in Cargo.toml for each release.
+
+The default update repository is `saffroncarp1106/ReDoxCodex`.
+`REDOX_UPDATE_REPOSITORY` optionally overrides it. For private releases, set
+`REDOX_UPDATE_TOKEN` in the environment to a GitHub token with read access to
+that repository. Each user needs their own access; tokens are not bundled or
+saved in application settings. Git credential-manager access alone does not
+authenticate the updater's GitHub API request.
+
+Replying to a conversation imported from Codex history creates a separate ReDox chat with the loaded conversation context. The original history remains separate.

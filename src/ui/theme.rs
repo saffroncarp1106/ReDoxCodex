@@ -113,13 +113,59 @@ pub fn conversation_scroll() -> egui::style::ScrollStyle {
     }
 }
 
-pub(super) fn slider(ui: &mut egui::Ui, slider: egui::Slider<'_>) -> egui::Response {
+pub(super) fn panel_scroll(ui: &mut egui::Ui) {
     if ui.visuals().dark_mode {
+        ui.spacing_mut().scroll = egui::style::ScrollStyle {
+            bar_width: 7.0,
+            bar_inner_margin: 5.0,
+            handle_min_length: 24.0,
+            foreground_color: true,
+            ..egui::style::ScrollStyle::solid()
+        };
+    }
+}
+
+pub(super) fn card(ui: &mut egui::Ui, contents: impl FnOnce(&mut egui::Ui)) {
+    let dark = ui.visuals().dark_mode;
+    let panel = egui::Frame::NONE
+        .fill(if dark { surface() } else { sidebar() })
+        .stroke(egui::Stroke::new(1.0, border()))
+        .corner_radius(if dark { 9 } else { 0 })
+        .inner_margin(11)
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            contents(ui);
+        });
+    if !dark {
+        super::win98::bevel(ui.painter(), panel.response.rect, false);
+    }
+}
+
+pub(super) fn status_line(
+    ui: &mut egui::Ui,
+    label: impl Into<egui::WidgetText>,
+    color: egui::Color32,
+) {
+    ui.horizontal(|ui| {
+        let (dot, _) = ui.allocate_exact_size(egui::vec2(8.0, 12.0), egui::Sense::hover());
+        ui.painter().circle_filled(dot.center(), 3.5, color);
+        ui.add(egui::Label::new(label).truncate());
+    });
+}
+
+pub(super) fn slider(ui: &mut egui::Ui, slider: egui::Slider<'_>) -> egui::Response {
+    let dark = ui.visuals().dark_mode;
+    let inactive = ui.visuals().widgets.inactive;
+    if dark && inactive.bg_fill != egui::Color32::TRANSPARENT {
         return ui.add(slider);
     }
     ui.scope(|ui| {
         ui.spacing_mut().slider_rail_height = 2.0;
-        ui.visuals_mut().widgets.inactive.bg_fill = egui::Color32::from_gray(155);
+        ui.visuals_mut().widgets.inactive.bg_fill = if dark {
+            inactive.fg_stroke.color.gamma_multiply(0.55)
+        } else {
+            egui::Color32::from_gray(155)
+        };
         ui.add(slider)
     })
     .inner

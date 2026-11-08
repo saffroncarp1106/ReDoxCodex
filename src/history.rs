@@ -205,6 +205,7 @@ pub fn import(session: &mut Session, page: ConversationPage, older: bool) -> Uui
         .position(|chat| chat.thread_id.as_deref() == Some(&page.entry.id))
         .unwrap_or_else(|| {
             let mut chat = Chat::new(Some(page.entry.cwd.clone()));
+            chat.imported_history = true;
             chat.thread_id = Some(page.entry.id.clone());
             session.chats.push(chat);
             session.chats.len() - 1

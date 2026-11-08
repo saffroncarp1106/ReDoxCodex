@@ -137,32 +137,60 @@ impl ReDox {
                 .inner_margin(Margin::symmetric(12, 6))
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
-                    ui.set_min_width(ui.available_width());
+                    ui.set_max_width(ui.available_width());
                     if let Some(chat) = self.session.active_mut() {
                         let mut remove = None;
-                        ui.horizontal_wrapped(|ui| {
-                            for file in &chat.attachments {
-                                Frame::new()
-                                    .fill(if classic {
-                                        theme::surface()
-                                    } else {
-                                        Color32::from_gray(62)
-                                    })
-                                    .corner_radius(if classic { 0 } else { 8 })
-                                    .inner_margin(6)
-                                    .show(ui, |ui| {
-                                        ui.horizontal(|ui| {
-                                            ui.label(RichText::new(file.name()).size(12.0))
-                                                .on_hover_text(file.path.display().to_string());
-                                            if ui
-                                                .small_button("×")
-                                                .on_hover_text("Remove attachment")
-                                                .clicked()
-                                            {
-                                                remove = Some(file.id);
-                                            }
-                                        });
-                                    });
+                        let available = ui.available_width();
+                        let columns = ((available + 5.0) / 257.0).floor().max(1.0) as usize;
+                        let chip_width =
+                            ((available - (columns - 1) as f32 * 5.0) / columns as f32 - 12.0)
+                                .clamp(1.0, 240.0);
+                        ui.vertical(|ui| {
+                            for row in chat.attachments.chunks(columns) {
+                                ui.horizontal(|ui| {
+                                    ui.spacing_mut().item_spacing.x = 5.0;
+                                    for file in row {
+                                        Frame::new()
+                                            .fill(if classic {
+                                                theme::surface()
+                                            } else {
+                                                Color32::from_gray(62)
+                                            })
+                                            .corner_radius(if classic { 0 } else { 8 })
+                                            .inner_margin(6)
+                                            .show(ui, |ui| {
+                                                ui.set_width(chip_width);
+                                                ui.horizontal(|ui| {
+                                                    ui.add_sized(
+                                                        [(chip_width - 33.0).max(1.0), 20.0],
+                                                        egui::Label::new(
+                                                            RichText::new(file.name()).size(12.0),
+                                                        )
+                                                        .truncate(),
+                                                    )
+                                                    .on_hover_ui(|ui| {
+                                                        ui.label(file.path.display().to_string());
+                                                        if file.text.is_none() {
+                                                            ui.set_max_width(280.0);
+                                                            super::media::show(
+                                                                ui,
+                                                                &file.path.to_string_lossy(),
+                                                                false,
+                                                                None,
+                                                            );
+                                                        }
+                                                    });
+                                                    if ui
+                                                        .small_button("×")
+                                                        .on_hover_text("Remove attachment")
+                                                        .clicked()
+                                                    {
+                                                        remove = Some(file.id);
+                                                    }
+                                                });
+                                            });
+                                    }
+                                });
                             }
                         });
                         if let Some(id) = remove {
@@ -187,7 +215,7 @@ impl ReDox {
                                     .frame(false)
                                     .font(FontId::proportional(14.0))
                                     .hint_text(&self.active_ui.config.placeholder)
-                                    .desired_width(f32::INFINITY)
+                                    .desired_width(ui.available_width())
                                     .desired_rows(1)
                                     .return_key(egui::KeyboardShortcut::new(
                                         egui::Modifiers::SHIFT,
@@ -217,127 +245,154 @@ impl ReDox {
                         });
                     }
                     ui.add_space(6.0);
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 3.0;
-                        ui.spacing_mut().button_padding.x = 5.0;
-                        ui.menu_button(RichText::new("+").size(23.0), |ui| {
-                            if ui
-                                .add_enabled(!self.picking_files, egui::Button::new("Add files"))
-                                .clicked()
-                            {
-                                self.pick_files(context);
-                                ui.close();
-                            }
-                            if context.viewport_id() == egui::ViewportId::ROOT
-                                && ui.button("Open project folder").clicked()
-                            {
-                                self.pick_workspace(context);
-                                ui.close();
-                            }
-                        });
-                        if let Some(chat) = self.session.active_mut()
-                            && chat.workspace.is_some()
-                        {
-                            let editable = self.running.is_none();
-                            let color = if chat.mode == Mode::FullAccess {
-                                Color32::from_rgb(231, 120, 49)
-                            } else {
-                                text()
-                            };
-                            let (rect, _) =
-                                ui.allocate_exact_size(vec2(15.0, 18.0), Sense::hover());
-                            icons::paint(ui.painter(), rect.shrink(1.0), Icon::Shield, color);
-                            let mut mode = chat.mode;
-                            ui.add_enabled_ui(editable, |ui| {
-                                ui.menu_button(
-                                    RichText::new(chat.mode.label()).size(12.0).color(color),
-                                    |ui| {
-                                        for option in [Mode::Chat, Mode::Code, Mode::FullAccess] {
-                                            if ui
-                                                .selectable_value(&mut mode, option, option.label())
-                                                .clicked()
-                                            {
-                                                ui.close();
-                                            }
-                                        }
-                                    },
-                                );
-                            });
-                            chat.set_mode(mode);
-                        } else {
-                            ui.label(RichText::new("Chat").size(12.0))
-                                .on_hover_text("No project folder");
-                        }
-
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            let can_send = self.runtime.is_some()
-                                && !self.picking_files
-                                && self.session.active().is_some_and(|chat| {
-                                    !chat.archived
-                                        && (!chat.draft.trim().is_empty()
-                                            || !chat.attachments.is_empty())
-                                });
-                            let running = self.active_chat_running();
-                            let sense = if can_send {
-                                Sense::click_and_drag()
-                            } else {
-                                Sense::click()
-                            };
+                    ui.allocate_ui_with_layout(
+                        vec2(ui.available_width(), 34.0),
+                        Layout::left_to_right(Align::Center),
+                        |ui| {
+                            ui.spacing_mut().item_spacing.x = 3.0;
+                            ui.spacing_mut().button_padding.x = 5.0;
                             if classic {
-                                let response = ui.add_enabled(
-                                    can_send,
-                                    egui::Button::new("Send")
-                                        .min_size(vec2(58.0, 23.0))
-                                        .sense(sense),
-                                );
-                                super::win98::bevel(
-                                    ui.painter(),
-                                    response.rect,
-                                    response.is_pointer_button_down_on(),
-                                );
+                                ui.spacing_mut().interact_size.y = 28.0;
+                                ui.spacing_mut().button_padding.y = 0.0;
+                            }
+                            ui.menu_button(RichText::new("+").size(23.0), |ui| {
+                                if ui
+                                    .add_enabled(
+                                        !self.picking_files,
+                                        egui::Button::new("Add files"),
+                                    )
+                                    .clicked()
+                                {
+                                    self.pick_files(context);
+                                    ui.close();
+                                }
+                                if context.viewport_id() == egui::ViewportId::ROOT
+                                    && ui.button("Open project folder").clicked()
+                                {
+                                    self.pick_workspace(context);
+                                    ui.close();
+                                }
+                            });
+                            if let Some(chat) = self.session.active_mut()
+                                && chat.workspace.is_some()
+                            {
+                                let editable = self.running.is_none();
+                                let color = if chat.mode == Mode::FullAccess {
+                                    Color32::from_rgb(231, 120, 49)
+                                } else {
+                                    text()
+                                };
+                                let (rect, _) =
+                                    ui.allocate_exact_size(vec2(15.0, 18.0), Sense::hover());
+                                icons::paint(ui.painter(), rect.shrink(1.0), Icon::Shield, color);
+                                ui.add_space(5.0);
+                                let mut mode = chat.mode;
+                                ui.add_enabled_ui(editable, |ui| {
+                                    ui.menu_button(
+                                        RichText::new(chat.mode.label()).size(12.0).color(color),
+                                        |ui| {
+                                            for option in [Mode::Chat, Mode::Code, Mode::FullAccess]
+                                            {
+                                                if ui
+                                                    .selectable_value(
+                                                        &mut mode,
+                                                        option,
+                                                        option.label(),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    ui.close();
+                                                }
+                                            }
+                                        },
+                                    );
+                                });
+                                chat.set_mode(mode);
+                            } else {
+                                ui.label(RichText::new("Chat").size(12.0))
+                                    .on_hover_text("No project folder");
+                            }
+
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                let can_send = self.runtime.is_some()
+                                    && !self.picking_files
+                                    && self.session.active().is_some_and(|chat| {
+                                        !chat.archived
+                                            && (!chat.draft.trim().is_empty()
+                                                || !chat.attachments.is_empty())
+                                    });
+                                let running = self.active_chat_running();
+                                let sense = if can_send {
+                                    Sense::click_and_drag()
+                                } else {
+                                    Sense::click()
+                                };
+                                if classic {
+                                    let response = ui.add_enabled(
+                                        can_send,
+                                        egui::Button::new("Send")
+                                            .min_size(vec2(58.0, 28.0))
+                                            .sense(sense),
+                                    );
+                                    super::win98::bevel(
+                                        ui.painter(),
+                                        response.rect,
+                                        response.is_pointer_button_down_on(),
+                                    );
+                                    if can_send {
+                                        send |= self.queue_send_control(response);
+                                    }
+                                    if running {
+                                        stop |= super::win98::button(ui, "Stop", vec2(52.0, 28.0))
+                                            .clicked();
+                                    }
+                                    self.model_effort_picker(ui, "composer_model_effort");
+                                    return;
+                                }
+                                let (rect, response) =
+                                    ui.allocate_exact_size(vec2(28.0, 28.0), sense);
+                                let fill = if can_send || running {
+                                    theme::blue()
+                                } else {
+                                    Color32::from_gray(85)
+                                };
+                                ui.painter().circle_filled(rect.center(), 14.0, fill);
+                                if running && !can_send {
+                                    ui.painter().rect_filled(
+                                        egui::Rect::from_center_size(rect.center(), vec2(9.0, 9.0)),
+                                        1,
+                                        text(),
+                                    );
+                                } else {
+                                    icons::paint(
+                                        ui.painter(),
+                                        rect.shrink(6.0),
+                                        Icon::ArrowUp,
+                                        text(),
+                                    );
+                                }
                                 if can_send {
                                     send |= self.queue_send_control(response);
+                                } else if running {
+                                    stop |= response.on_hover_text("Stop response").clicked();
                                 }
-                                if running {
-                                    stop |= super::win98::button(ui, "Stop", vec2(52.0, 23.0))
-                                        .clicked();
+                                if running
+                                    && can_send
+                                    && icons::button(ui, Icon::Close, "Stop response").clicked()
+                                {
+                                    stop = true;
                                 }
+                                ui.add_enabled_ui(false, |ui| {
+                                    icons::button(
+                                        ui,
+                                        Icon::Mic,
+                                        "Voice input is not available yet",
+                                    );
+                                });
                                 self.model_effort_picker(ui, "composer_model_effort");
-                                return;
-                            }
-                            let (rect, response) = ui.allocate_exact_size(vec2(28.0, 28.0), sense);
-                            let fill = if can_send || running {
-                                theme::blue()
-                            } else {
-                                Color32::from_gray(85)
-                            };
-                            ui.painter().circle_filled(rect.center(), 14.0, fill);
-                            if running && !can_send {
-                                ui.painter().rect_filled(
-                                    egui::Rect::from_center_size(rect.center(), vec2(9.0, 9.0)),
-                                    1,
-                                    text(),
-                                );
-                            } else {
-                                icons::paint(ui.painter(), rect.shrink(6.0), Icon::ArrowUp, text());
-                            }
-                            if can_send {
-                                send |= self.queue_send_control(response);
-                            } else if running {
-                                stop |= response.on_hover_text("Stop response").clicked();
-                            }
-                            if running
-                                && can_send
-                                && icons::button(ui, Icon::Close, "Stop response").clicked()
-                            {
-                                stop = true;
-                            }
-                            ui.add_enabled_ui(false, |ui| {
-                                icons::button(ui, Icon::Mic, "Voice input is not available yet");
                             });
-                            self.model_effort_picker(ui, "composer_model_effort");
-                        });
-                    });
+                        },
+                    );
                 });
             self.queued_messages(ui);
             if self.active_chat_running() {

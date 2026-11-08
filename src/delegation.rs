@@ -33,10 +33,23 @@ pub struct Task {
 
 pub enum Event {
     Started(Task),
-    Content { id: String, text: String },
-    ReplaceContent { id: String, offset: usize, text: String },
-    Progress { id: String, text: String },
-    Finished { id: String, error: Option<String> },
+    Content {
+        id: String,
+        text: String,
+    },
+    ReplaceContent {
+        id: String,
+        offset: usize,
+        text: String,
+    },
+    Progress {
+        id: String,
+        text: String,
+    },
+    Finished {
+        id: String,
+        error: Option<String>,
+    },
 }
 
 pub fn tool_spec() -> Value {

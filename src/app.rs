@@ -40,6 +40,7 @@ enum Event {
 }
 
 pub struct ReDox {
+    updates: redox::updates::Updates,
     project_windows: Vec<ui::project_window::ProjectWindow>,
     focus_prompt: bool,
     prompt_input_id: Option<egui::Id>,
@@ -197,6 +198,7 @@ impl ReDox {
         let (run_sender, run_receiver) = tokio::sync::mpsc::channel(128);
 
         let mut app = Self {
+            updates: redox::updates::Updates::default(),
             focus_prompt: true,
             prompt_input_id: None,
             paste_gate: ui::clipboard::PasteGate::default(),

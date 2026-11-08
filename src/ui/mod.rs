@@ -28,6 +28,7 @@ mod shell;
 pub(super) mod skins;
 pub(super) mod startup;
 pub(super) mod theme;
+mod updates;
 mod usage;
 mod win98;
 mod window_frame;
@@ -151,5 +152,6 @@ impl ReDox {
         self.ui_drop_hint(context);
         self.project_windows(context);
         self.capture_frame(context);
+        self.update_prompt(context);
     }
 }

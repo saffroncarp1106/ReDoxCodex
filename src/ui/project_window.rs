@@ -29,7 +29,6 @@ impl Default for Glow {
 
 impl Glow {
     pub fn settings(&mut self, ui: &mut egui::Ui) {
-        ui.label(egui::RichText::new("Project folder border glow").strong());
         ui.checkbox(&mut self.enabled, "Show glow when hovering the border");
         ui.horizontal(|ui| {
             ui.color_edit_button_srgb(&mut self.color);

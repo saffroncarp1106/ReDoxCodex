@@ -7,7 +7,7 @@ use super::{conversation::render_transcript, theme, window_frame};
 use crate::app::ReDox;
 
 pub(super) const ID: &str = "win98";
-pub(super) const HEADER_HEIGHT: f32 = 57.0;
+pub(super) const HEADER_HEIGHT: f32 = 64.0;
 pub(super) const NAVY: Color32 = Color32::from_rgb(0, 0, 128);
 const SILVER: Color32 = Color32::from_gray(192);
 const WHITE: Color32 = Color32::WHITE;
@@ -301,9 +301,18 @@ impl ReDox {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 self.win98_caption(ui, context, true);
                 Frame::NONE
-                    .inner_margin(Margin::symmetric(4, 0))
+                    .inner_margin(Margin {
+                        left: 4,
+                        right: 4,
+                        top: 7,
+                        bottom: 0,
+                    })
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| self.main_menus(ui, context));
+                        ui.allocate_ui_with_layout(
+                            vec2(ui.available_width(), 30.0),
+                            Layout::left_to_right(Align::Center),
+                            |ui| self.main_menus(ui, context),
+                        );
                     });
             });
     }

@@ -68,13 +68,57 @@ pub(super) fn show_in_workspace(
 }
 
 fn render(ui: &mut egui::Ui, source: &str) {
+    let mut offset = 0;
+    let mut block_start = None;
+    let mut code = String::new();
+    for (event, range) in Parser::new(source).into_offset_iter() {
+        match event {
+            Event::Start(Tag::CodeBlock(_)) => {
+                render_prose(ui, &source[offset..range.start]);
+                block_start = Some(range.start);
+                code.clear();
+            }
+            Event::Text(text) if block_start.is_some() => code.push_str(&text),
+            Event::End(pulldown_cmark::TagEnd::CodeBlock) if block_start.is_some() => {
+                egui::Frame::group(ui.style()).show(ui, |ui| {
+                    let width = ui.available_width();
+                    ui.horizontal_top(|ui| {
+                        ui.allocate_ui_with_layout(
+                            vec2((width - 36.0).max(1.0), 24.0),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                egui::ScrollArea::horizontal().show(ui, |ui| {
+                                    ui.label(
+                                        RichText::new(code.trim_end_matches('\n')).monospace(),
+                                    );
+                                });
+                            },
+                        );
+                        if ui
+                            .add_sized([28.0, 24.0], egui::Button::new("Copy"))
+                            .on_hover_text("Copy code")
+                            .clicked()
+                        {
+                            ui.ctx().copy_text(code.clone());
+                        }
+                    });
+                });
+                offset = range.end;
+                block_start = None;
+            }
+            _ => {}
+        }
+    }
+    render_prose(ui, &source[offset..]);
+}
+
+fn render_prose(ui: &mut egui::Ui, source: &str) {
     MARKDOWN.with(|cache| {
         CommonMarkViewer::new()
             .render_math_fn(Some(&render_math))
             .show(ui, &mut cache.borrow_mut(), source);
     });
 }
-
 fn render_math(ui: &mut egui::Ui, source: &str, inline: bool) {
     MATH.with(|cache| cache.borrow_mut().show(ui, source, inline));
 }

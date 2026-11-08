@@ -1,4 +1,4 @@
-use eframe::egui::{self, Align, Color32, Frame, Layout, RichText, vec2};
+use eframe::egui::{self, Align, Align2, Color32, Frame, Layout, Margin, RichText, Stroke, vec2};
 
 use super::controls::model_label;
 use super::icons::{self, Icon};
@@ -18,6 +18,16 @@ const SETTINGS_PAGES: [(SettingsPage, &str); 7] = [
     (SettingsPage::About, "About"),
 ];
 
+const SETTINGS_ICONS: [Icon; 7] = [
+    Icon::Home,
+    Icon::Bolt,
+    Icon::Shield,
+    Icon::Grid,
+    Icon::Reticle,
+    Icon::Settings,
+    Icon::Chat,
+];
+
 impl ReDox {
     pub(in crate::app) fn settings(&mut self, context: &egui::Context) {
         if self.active_ui.config.layout == win98::ID {
@@ -34,7 +44,7 @@ impl ReDox {
                 context,
                 "native_settings",
                 "Settings",
-                vec2(760.0, 560.0),
+                vec2(800.0, 590.0),
                 &mut open,
                 |ui| {
                     let child = ui.ctx().clone();
@@ -46,8 +56,8 @@ impl ReDox {
         }
         let available = context.content_rect().size();
         let size = vec2(
-            (available.x - 40.0).clamp(480.0, 740.0),
-            (available.y - 90.0).clamp(280.0, 520.0),
+            (available.x - 40.0).clamp(420.0, 780.0),
+            (available.y - 90.0).clamp(280.0, 550.0),
         );
         egui::Window::new("Settings")
             .id(egui::Id::new("settings_panel_v3"))
@@ -63,14 +73,15 @@ impl ReDox {
     }
 
     fn settings_body(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
-        ui.add_space(8.0);
+        ui.add_space(6.0);
         let pages = SETTINGS_PAGES;
-        if ui.available_width() < 620.0 {
+        if ui.available_width() < 560.0 {
             let title = pages
                 .iter()
                 .find(|(page, _)| *page == self.settings_page)
                 .map_or("Account", |(_, title)| *title);
             egui::ComboBox::from_id_salt("settings_section")
+                .width(180.0)
                 .selected_text(title)
                 .show_ui(ui, |ui| {
                     for (page, label) in pages {
@@ -81,28 +92,32 @@ impl ReDox {
             self.settings_content(ui, context);
         } else {
             ui.horizontal_top(|ui| {
-                ui.allocate_ui_with_layout(
-                    vec2(150.0, (ui.available_height() - 8.0).max(200.0)),
-                    Layout::top_down(Align::Min),
-                    |ui| {
-                        ui.spacing_mut().item_spacing.y = 6.0;
-                        for (page, label) in pages {
-                            let selected = self.settings_page == page;
-                            let button = egui::Button::new(label)
-                                .fill(if selected {
-                                    surface()
-                                } else {
-                                    Color32::TRANSPARENT
-                                })
-                                .corner_radius(8);
-                            if ui.add_sized([145.0, 36.0], button).clicked() {
-                                self.settings_page = page;
-                            }
-                        }
-                    },
-                );
-                ui.separator();
-                self.settings_content(ui, context);
+                Frame::NONE
+                    .fill(theme::rail())
+                    .stroke(Stroke::new(1.0, theme::border()))
+                    .corner_radius(10)
+                    .inner_margin(8)
+                    .show(ui, |ui| {
+                        ui.allocate_ui_with_layout(
+                            vec2(166.0, 0.0),
+                            Layout::top_down(Align::Min),
+                            |ui| {
+                                ui.spacing_mut().item_spacing.y = 3.0;
+                                for ((page, label), icon) in pages.into_iter().zip(SETTINGS_ICONS) {
+                                    if settings_tab(ui, label, icon, self.settings_page == page)
+                                        .clicked()
+                                    {
+                                        self.settings_page = page;
+                                    }
+                                }
+                            },
+                        );
+                    });
+                Frame::NONE
+                    .inner_margin(Margin::symmetric(10, 4))
+                    .show(ui, |ui| {
+                        self.settings_content(ui, context);
+                    });
             });
         }
     }
@@ -265,25 +280,18 @@ impl ReDox {
 
     fn settings_content(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
         let classic = self.active_ui.config.layout == win98::ID;
-        if !classic {
-            ui.spacing_mut().scroll = theme::conversation_scroll();
-        }
+        theme::panel_scroll(ui);
         egui::ScrollArea::vertical()
-            .id_salt((
-                "settings_content",
-                classic.then_some(self.settings_page as u8),
-            ))
+            .id_salt(("settings_content", self.settings_page as u8))
             .max_height(if classic {
                 (ui.available_height() - 44.0).max(0.0)
             } else {
-                (ui.available_height() - 16.0).max(220.0)
+                (ui.available_height() - 6.0).max(0.0)
             })
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.vertical(|ui| {
-                    if !classic {
-                        ui.set_min_width((ui.available_width() - 8.0).max(260.0));
-                    }
+                    ui.set_min_width(ui.available_width());
                     ui.add_space(4.0);
                     match self.settings_page {
                         SettingsPage::Account => self.account_settings(ui, context),
@@ -313,34 +321,18 @@ impl ReDox {
             "Account",
             "Connect your ChatGPT account and manage sign-in.",
         );
-        Frame::new()
-            .fill(surface())
-            .corner_radius(10)
-            .inner_margin(14)
-            .show(ui, |ui| {
-                ui.set_min_width(ui.available_width());
-                ui.horizontal(|ui| {
-                    let color = if self.signed_in {
-                        Color32::from_rgb(74, 188, 123)
-                    } else {
-                        muted()
-                    };
-                    let (rect, _) = ui.allocate_exact_size(vec2(10.0, 10.0), egui::Sense::hover());
-                    ui.painter().circle_filled(rect.center(), 4.0, color);
-                    ui.label(
-                        RichText::new(if self.signed_in {
-                            "Connected"
-                        } else if self.refreshing {
-                            "Connecting…"
-                        } else {
-                            "Not connected"
-                        })
-                        .font(theme::semibold(15.0)),
-                    );
-                });
-                ui.label(&self.account);
-            });
-        ui.add_space(12.0);
+        theme::card(ui, |ui| {
+            let (label, color) = if self.refreshing {
+                ("Connecting…", theme::blue())
+            } else if self.signed_in {
+                ("Connected", Color32::from_rgb(43, 155, 101))
+            } else {
+                ("Not connected", muted())
+            };
+            theme::status_line(ui, RichText::new(label).strong(), color);
+            ui.label(RichText::new(&self.account).color(muted()));
+        });
+        ui.add_space(4.0);
         if ui
             .add_enabled(!self.refreshing, egui::Button::new("Refresh connection"))
             .clicked()
@@ -370,25 +362,19 @@ impl ReDox {
             ui.label(&self.login_text);
         }
         if let Some(challenge) = &self.login_challenge {
-            Frame::new()
-                .fill(surface())
-                .corner_radius(10)
-                .inner_margin(14)
-                .show(ui, |ui| {
-                    ui.label(RichText::new("Verification code").color(muted()));
-                    ui.add(
-                        egui::Label::new(
-                            RichText::new(&challenge.user_code).monospace().size(25.0),
-                        )
+            theme::card(ui, |ui| {
+                ui.label(RichText::new("Verification code").color(muted()));
+                ui.add(
+                    egui::Label::new(RichText::new(&challenge.user_code).monospace().size(25.0))
                         .selectable(true),
-                    );
-                    ui.horizontal(|ui| {
-                        if ui.button("Copy code").clicked() {
-                            context.copy_text(challenge.user_code.clone());
-                        }
-                        ui.hyperlink_to("Open sign-in page", &challenge.verification_url);
-                    });
+                );
+                ui.horizontal(|ui| {
+                    if ui.button("Copy code").clicked() {
+                        context.copy_text(challenge.user_code.clone());
+                    }
+                    ui.hyperlink_to("Open sign-in page", &challenge.verification_url);
                 });
+            });
         }
         if signing_in && ui.button("Cancel sign-in").clicked() {
             if let Some(task) = self.login_task.take() {
@@ -411,31 +397,39 @@ impl ReDox {
             "Models & reasoning",
             "Set the model and reasoning effort for your next message.",
         );
-        ui.label(RichText::new("Model").font(theme::semibold(14.0)));
-        egui::ComboBox::from_id_salt("settings_model")
-            .width(300.0)
-            .selected_text(model_label(&self.session.model))
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut self.session.model, DEFAULT_MODEL.into(), DEFAULT_MODEL);
-                for model in &self.models {
-                    ui.selectable_value(&mut self.session.model, model.clone(), model_label(model));
+        settings_group(ui, "Model", |ui| {
+            egui::ComboBox::from_id_salt("settings_model")
+                .width(ui.available_width().min(300.0))
+                .selected_text(model_label(&self.session.model))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut self.session.model,
+                        DEFAULT_MODEL.into(),
+                        DEFAULT_MODEL,
+                    );
+                    for model in &self.models {
+                        let selected = self.session.model == *model;
+                        if ui.selectable_label(selected, model_label(model)).clicked() {
+                            self.session.model.clone_from(model);
+                        }
+                    }
+                });
+        });
+        settings_group(ui, "Reasoning effort", |ui| {
+            self.effort_picker(ui, "settings_effort");
+            if let Some(model) = self.selected_model_info() {
+                let selected = self.selected_effort();
+                if let Some(option) = model
+                    .supported_reasoning_efforts
+                    .iter()
+                    .find(|option| Some(&option.reasoning_effort) == selected.as_ref())
+                {
+                    ui.label(RichText::new(&option.description).color(muted()));
                 }
-            });
-        ui.add_space(18.0);
-        ui.label(RichText::new("Reasoning effort").font(theme::semibold(14.0)));
-        self.effort_picker(ui, "settings_effort");
-        if let Some(model) = self.selected_model_info() {
-            let selected = self.selected_effort();
-            if let Some(option) = model
-                .supported_reasoning_efforts
-                .iter()
-                .find(|option| Some(&option.reasoning_effort) == selected.as_ref())
-            {
-                ui.label(RichText::new(&option.description).color(muted()));
             }
-        }
-        ui.add_space(12.0);
-        ui.label(RichText::new("Your effort choice is remembered separately for each model. Only supported levels are offered.").color(muted()));
+            ui.add_space(12.0);
+            ui.label(RichText::new("Your effort choice is remembered separately for each model. Only supported levels are offered.").color(muted()));
+        });
         ui.add_space(18.0);
         ui.label("You can also change the model and effort directly in the composer.");
     }
@@ -548,118 +542,122 @@ impl ReDox {
             "Appearance",
             "Adjust the interface without changing your chats.",
         );
-        self.ui_picker(ui, "settings_ui_picker");
-        self.skin_settings(ui, context);
-        self.ui_preferences.project_glow.settings(ui);
-        ui.add_space(12.0);
-        ui.label(
-            RichText::new("Drop a UI JSON file or pack folder into the window to import it.")
-                .small()
-                .color(muted()),
-        );
-        if let Some(error) = &self.ui_error {
-            ui.colored_label(Color32::LIGHT_RED, error);
-        }
-        for error in &self.ui_catalog.errors {
-            ui.colored_label(Color32::LIGHT_RED, error);
-        }
-        ui.add_space(12.0);
-        ui.label(RichText::new("Text colors").font(theme::semibold(14.0)));
-        let base = self.active_ui.config.colors().unwrap_or_default();
-        let mut colors = self
-            .ui_preferences
-            .text_colors
-            .get(&self.active_ui.id)
-            .cloned()
-            .unwrap_or_default();
-        let mut changed = false;
-        for (label, choice, fallback) in [
-            ("Top row text", &mut colors.menu, base.menu_text),
-            ("General text", &mut colors.general, base.text),
-            (
-                "Text box background",
-                &mut colors.input_background,
-                base.input_background,
-            ),
-        ] {
-            ui.horizontal(|ui| {
-                let mut rgb = choice.unwrap_or([fallback.r(), fallback.g(), fallback.b()]);
-                if ui.color_edit_button_srgb(&mut rgb).changed() {
-                    *choice = Some(rgb);
-                    changed = true;
-                }
-                ui.label(label);
-                ui.label(
-                    RichText::new(format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]))
-                        .small()
-                        .color(muted()),
-                );
+        settings_group(ui, "Interface", |ui| {
+            ui.horizontal_wrapped(|ui| {
+                self.ui_picker(ui, "settings_ui_picker");
+                self.skin_settings(ui, context);
             });
-        }
-        ui.label(RichText::new("Top row controls File, Edit, View, Help, and the UI selector. General text controls the main interface and chat text. Changes apply live and are saved separately for each layout.").small().color(muted()));
-        if ui.button("Restore text colors").clicked() {
-            colors = theme::TextColors::default();
-            changed = true;
-        }
-        if changed {
-            self.ui_preferences
-                .text_colors
-                .insert(self.active_ui.id.clone(), colors);
-            context.request_repaint_of(egui::ViewportId::ROOT);
-        }
+            if let Some(error) = &self.ui_error {
+                ui.colored_label(Color32::LIGHT_RED, error);
+            }
+            for error in &self.ui_catalog.errors {
+                ui.colored_label(Color32::LIGHT_RED, error);
+            }
+        });
+        settings_group(ui, "Project folder border glow", |ui| {
+            self.ui_preferences.project_glow.settings(ui)
+        });
         ui.add_space(12.0);
-        ui.label(RichText::new("Interface scale").font(theme::semibold(14.0)));
-        let mut percent = self.ui_preferences.zoom * 100.0;
-        let changed = ui
-            .scope(|ui| {
-                ui.spacing_mut().slider_width = 190.0;
-                if ui.visuals().dark_mode {
-                    let visuals = &mut ui.style_mut().visuals;
-                    visuals.widgets.inactive.bg_fill = theme::blue();
-                    visuals.widgets.inactive.weak_bg_fill = Color32::from_gray(75);
-                    visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0_f32, theme::blue());
-                    visuals.widgets.hovered.bg_fill = theme::blue();
-                    visuals.widgets.active.bg_fill = theme::blue();
-                }
-                theme::slider(
-                    ui,
-                    egui::Slider::new(&mut percent, 80.0..=150.0)
-                        .suffix("%")
-                        .step_by(5.0),
+        settings_group(ui, "Text colors", |ui| {
+            let base = self.active_ui.config.colors().unwrap_or_default();
+            let mut colors = self
+                .ui_preferences
+                .text_colors
+                .get(&self.active_ui.id)
+                .cloned()
+                .unwrap_or_default();
+            let mut changed = false;
+            for (label, choice, fallback) in [
+                ("Top row text", &mut colors.menu, base.menu_text),
+                ("General text", &mut colors.general, base.text),
+                (
+                    "Text box background",
+                    &mut colors.input_background,
+                    base.input_background,
+                ),
+            ] {
+                ui.horizontal(|ui| {
+                    let mut rgb = choice.unwrap_or([fallback.r(), fallback.g(), fallback.b()]);
+                    if ui.color_edit_button_srgb(&mut rgb).changed() {
+                        *choice = Some(rgb);
+                        changed = true;
+                    }
+                    ui.label(label);
+                    ui.label(
+                        RichText::new(format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]))
+                            .small()
+                            .color(muted()),
+                    );
+                });
+            }
+            ui.label(RichText::new("Top row controls File, Edit, View, Help, and the UI selector. General text controls the main interface and chat text. Changes apply live and are saved separately for each layout.").small().color(muted()));
+            if ui.button("Restore text colors").clicked() {
+                colors = theme::TextColors::default();
+                changed = true;
+            }
+            if changed {
+                self.ui_preferences
+                    .text_colors
+                    .insert(self.active_ui.id.clone(), colors);
+                context.request_repaint_of(egui::ViewportId::ROOT);
+            }
+        });
+        ui.add_space(12.0);
+        settings_group(ui, "Window and scale", |ui| {
+            let mut percent = self.ui_preferences.zoom * 100.0;
+            let changed = ui
+                .scope(|ui| {
+                    ui.spacing_mut().slider_width = 190.0;
+                    if ui.visuals().dark_mode {
+                        let visuals = &mut ui.style_mut().visuals;
+                        visuals.widgets.inactive.bg_fill = theme::blue();
+                        visuals.widgets.inactive.weak_bg_fill = Color32::from_gray(75);
+                        visuals.widgets.inactive.bg_stroke =
+                            egui::Stroke::new(1.0_f32, theme::blue());
+                        visuals.widgets.hovered.bg_fill = theme::blue();
+                        visuals.widgets.active.bg_fill = theme::blue();
+                    }
+                    theme::slider(
+                        ui,
+                        egui::Slider::new(&mut percent, 80.0..=150.0)
+                            .suffix("%")
+                            .step_by(5.0),
+                    )
+                    .changed()
+                })
+                .inner;
+            if changed {
+                self.ui_preferences.zoom = percent / 100.0;
+                context.set_zoom_factor(self.ui_preferences.zoom);
+            }
+            ui.add_space(16.0);
+            ui.checkbox(&mut self.sidebar_visible, "Show project and chat sidebar");
+            if ui
+                .checkbox(
+                    &mut self.ui_preferences.floating_windows,
+                    "Allow popup windows outside the app",
                 )
                 .changed()
-            })
-            .inner;
-        if changed {
-            self.ui_preferences.zoom = percent / 100.0;
-            context.set_zoom_factor(self.ui_preferences.zoom);
-        }
-        ui.add_space(16.0);
-        ui.checkbox(&mut self.sidebar_visible, "Show project and chat sidebar");
-        if ui
-            .checkbox(
-                &mut self.ui_preferences.floating_windows,
-                "Allow popup windows outside the app",
-            )
-            .changed()
-        {
-            context.request_repaint_of(egui::ViewportId::ROOT);
-        }
-        ui.label(RichText::new("Settings, usage, rename, and approval dialogs open as separate desktop windows. Turn this off to keep them inside the app.").small().color(muted()));
-        ui.add_space(16.0);
-        if ui.button("Restore default appearance").clicked() {
-            self.ui_preferences.text_colors.remove(&self.active_ui.id);
-            context.request_repaint_of(egui::ViewportId::ROOT);
-            self.ui_preferences.zoom = Preferences::default().zoom;
-            self.sidebar_visible = true;
-            context.set_zoom_factor(1.0);
-        }
+            {
+                context.request_repaint_of(egui::ViewportId::ROOT);
+            }
+            ui.label(RichText::new("Settings, usage, rename, and approval dialogs open as separate desktop windows. Turn this off to keep them inside the app.").small().color(muted()));
+            ui.add_space(16.0);
+            if ui.button("Restore default appearance").clicked() {
+                self.ui_preferences.text_colors.remove(&self.active_ui.id);
+                context.request_repaint_of(egui::ViewportId::ROOT);
+                self.ui_preferences.zoom = Preferences::default().zoom;
+                self.sidebar_visible = true;
+                context.set_zoom_factor(1.0);
+            }
+        });
         ui.add_space(25.0);
-        ui.label(RichText::new("Custom interfaces").font(theme::semibold(14.0)));
-        ui.label(RichText::new("Drop JSON configs or folders containing ui.json into src/ui/layouts/. Available packs appear in the UI menu automatically. Config edits apply after selecting the UI and restarting.").color(muted()));
-        if ui.button("Copy UI packs folder").clicked() {
-            context.copy_text(self.ui_folder.clone().display().to_string());
-        }
+        settings_group(ui, "Custom interfaces", |ui| {
+            ui.label(RichText::new("Drop JSON configs or folders containing ui.json into src/ui/layouts/. Available packs appear in the UI menu automatically. Config edits apply after selecting the UI and restarting.").color(muted()));
+            if ui.button("Copy UI packs folder").clicked() {
+                context.copy_text(self.ui_folder.clone().display().to_string());
+            }
+        });
     }
 
     fn advanced_settings(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
@@ -713,25 +711,57 @@ fn heading(ui: &mut egui::Ui, title: &str, description: &str) {
         ui.add_space(8.0);
         return;
     }
-    ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(vec2(21.0, 26.0), egui::Sense::hover());
-        icons::paint(
-            ui.painter(),
-            rect.shrink2(vec2(1.0, 3.0)),
-            Icon::Settings,
-            muted(),
-        );
-        ui.label(RichText::new(title).font(theme::semibold(21.0)));
-    });
+    ui.label(RichText::new(title).font(theme::semibold(24.0)));
     ui.label(RichText::new(description).color(muted()));
-    ui.add_space(22.0);
+    ui.separator();
+    ui.add_space(6.0);
 }
 
 fn settings_group(ui: &mut egui::Ui, title: &str, contents: impl FnOnce(&mut egui::Ui)) {
     if ui.visuals().dark_mode {
-        ui.label(RichText::new(title).font(theme::semibold(14.0)));
-        contents(ui);
+        theme::card(ui, |ui| {
+            ui.label(RichText::new(title).font(theme::semibold(15.0)));
+            contents(ui);
+        });
     } else {
         win98::group_box(ui, title, contents);
     }
+}
+
+fn settings_tab(ui: &mut egui::Ui, label: &str, icon: Icon, selected: bool) -> egui::Response {
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(ui.available_width(), 35.0), egui::Sense::click());
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::SelectableLabel,
+            ui.is_enabled(),
+            selected,
+            label,
+        )
+    });
+    let painter = ui.painter();
+    if selected || response.hovered() || response.has_focus() {
+        painter.rect_filled(rect, 6, surface());
+    }
+    if selected {
+        painter.rect_filled(
+            egui::Rect::from_center_size(rect.left_center() + vec2(3.0, 0.0), vec2(2.0, 17.0)),
+            1,
+            theme::blue(),
+        );
+    }
+    icons::paint(
+        painter,
+        egui::Rect::from_center_size(rect.left_center() + vec2(17.0, 0.0), vec2(15.0, 15.0)),
+        icon,
+        if selected { theme::blue() } else { muted() },
+    );
+    painter.text(
+        rect.left_center() + vec2(31.0, 0.0),
+        Align2::LEFT_CENTER,
+        label,
+        egui::FontId::proportional(13.0),
+        theme::text(),
+    );
+    response
 }
