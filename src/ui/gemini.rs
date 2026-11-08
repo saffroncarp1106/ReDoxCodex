@@ -149,33 +149,14 @@ impl ReDox {
                         ui.add_space(42.0);
                     });
                     self.gemini_centered_composer(ui, context);
-                } else {
-                    ui.spacing_mut().scroll = theme::conversation_scroll();
-                    egui::ScrollArea::vertical()
-                        .id_salt(("gemini_chat", self.session.active_chat))
-                        .stick_to_bottom(true)
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            let width = (ui.available_width() - 48.0).clamp(260.0, 820.0);
-                            let offset = (ui.available_width() - width) * 0.5;
-                            ui.horizontal_top(|ui| {
-                                ui.add_space(offset);
-                                ui.vertical(|ui| {
-                                    ui.set_width(width);
-                                    ui.add_space(20.0);
-                                    if let Some(chat) = self.session.active() {
-                                        for message in &chat.messages {
-                                            super::conversation::render_message(
-                                                ui,
-                                                message,
-                                                chat.workspace.as_deref(),
-                                            );
-                                            ui.add_space(26.0);
-                                        }
-                                    }
-                                });
-                            });
-                        });
+                } else if let Some(chat) = self.session.active() {
+                    super::conversation::render_transcript(
+                        ui,
+                        chat,
+                        ("gemini_chat", self.session.active_chat),
+                        48.0,
+                        self.ui_preferences.codex_mode,
+                    );
                 }
             });
     }
@@ -269,12 +250,17 @@ impl ReDox {
                     }
                     {
                         let ready = self.session.active().is_some_and(|chat| {
-                            !chat.draft.trim().is_empty() || !chat.attachments.is_empty()
-                        });
+                            !chat.archived
+                                && (!chat.draft.trim().is_empty() || !chat.attachments.is_empty())
+                        }) && self.runtime.is_some()
+                            && !self.picking_files;
                         if ready {
-                            if icons::button(ui, Icon::ArrowUp, "Send message").clicked() {
-                                send = true;
-                            }
+                            let response = icons::button_with_sense(
+                                ui,
+                                Icon::ArrowUp,
+                                egui::Sense::click_and_drag(),
+                            );
+                            send |= self.queue_send_control(response);
                         } else {
                             ui.add_enabled_ui(false, |ui| {
                                 icons::button(ui, Icon::Mic, "Voice input is not available yet");
@@ -345,6 +331,7 @@ impl ReDox {
                 .color(theme::muted()),
             );
         });
+        self.queued_messages(ui);
         if let Some(error) = &self.attachment_error {
             ui.colored_label(Color32::LIGHT_RED, error);
         }

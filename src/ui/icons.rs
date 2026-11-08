@@ -30,7 +30,11 @@ pub enum Icon {
 }
 
 pub fn button(ui: &mut Ui, icon: Icon, tooltip: &str) -> Response {
-    let (rect, response) = ui.allocate_exact_size(vec2(30.0, 30.0), Sense::click());
+    button_with_sense(ui, icon, Sense::click()).on_hover_text(tooltip)
+}
+
+pub(super) fn button_with_sense(ui: &mut Ui, icon: Icon, sense: Sense) -> Response {
+    let (rect, response) = ui.allocate_exact_size(vec2(30.0, 30.0), sense);
     if response.hovered() && ui.is_enabled() {
         ui.painter().rect_filled(rect, 7, super::theme::surface());
     }
@@ -42,7 +46,7 @@ pub fn button(ui: &mut Ui, icon: Icon, tooltip: &str) -> Response {
         super::theme::muted()
     };
     paint(ui.painter(), rect.shrink(7.0), icon, color);
-    response.on_hover_text(tooltip)
+    response
 }
 
 pub fn paint(painter: &egui::Painter, rect: Rect, icon: Icon, color: Color32) {

@@ -6,6 +6,10 @@ use crate::codex::{self, Approval, ChatRequest, ProviderEvent};
 use crate::domain::{MessageStatus, RunId, Session};
 
 pub enum Update {
+    Activity {
+        turn_id: String,
+        update: crate::activity::ActivityUpdate,
+    },
     Feedback(uuid::Uuid, Result<(), String>),
     Delegation(crate::delegation::Event),
     Metrics(crate::ollama::Stats),
@@ -101,6 +105,9 @@ impl Running {
                     }
                 };
                 let update = match event {
+                    ProviderEvent::Activity { turn_id, update } => {
+                        Update::Activity { turn_id, update }
+                    }
                     ProviderEvent::Feedback(id, result) => Update::Feedback(id, result),
                     ProviderEvent::Delegation(event) => Update::Delegation(event),
                     ProviderEvent::Metrics(stats) => Update::Metrics(stats),
@@ -227,6 +234,21 @@ pub fn apply_event(session: &mut Session, active: Option<RunId>, event: RunEvent
             false
         }
         Update::Status(_) | Update::Approval(_) => false,
+        Update::Activity { turn_id, update } => {
+            if let Some(message) = session.run_message_mut(event.run) {
+                message.activity.turn_id = turn_id;
+                match update {
+                    crate::activity::ActivityUpdate::Command(mut command) => {
+                        command.offset = message.content.len();
+                        message.activity.record_command(command);
+                    }
+                    crate::activity::ActivityUpdate::Diff(diff) => {
+                        message.activity.replace_diff(&diff)
+                    }
+                }
+            }
+            false
+        }
         Update::Content(text) => {
             if let Some(message) = session.run_message_mut(event.run) {
                 message.content.push_str(&text);

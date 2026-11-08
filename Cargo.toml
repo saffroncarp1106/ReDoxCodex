@@ -17,6 +17,7 @@ egui_extras = { version = "=0.33.3", default-features = false, features = ["file
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "ico"] }
 base64 = "0.22"
 url = "2"
+percent-encoding = "2"
 open = "5"
 dirs = "6"
 arboard = "=3.7.0"
@@ -30,6 +31,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"
 uuid = { version = "1", features = ["v4", "serde"] }
 
 [target.'cfg(windows)'.dependencies]
+open = { version = "5", features = ["shellexecute-on-windows"] }
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"] }
 
 [build-dependencies]

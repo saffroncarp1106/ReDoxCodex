@@ -98,6 +98,7 @@ async fn approve(
     let (response, decision) = oneshot::channel();
     sender
         .send(ProviderEvent::Approval(Approval {
+            summary: "Allow the assistant to perform this project action?",
             description,
             response,
         }))

@@ -271,9 +271,19 @@ impl ReDox {
                 }
                 ui.horizontal(|ui| {
                     ui.add_space(8.0);
-                    ui.label(RichText::new("ChatGPT").font(theme::semibold(19.0)));
-                    let (rect, _) = ui.allocate_exact_size(vec2(13.0, 18.0), Sense::hover());
-                    icons::paint(ui.painter(), rect.shrink(2.0), Icon::Chevron, muted());
+                    let mode = &mut self.ui_preferences.codex_mode;
+                    egui::ComboBox::from_id_salt("chat_presentation")
+                        .width(96.0)
+                        .selected_text(
+                            RichText::new(if *mode { "Codex" } else { "ChatGPT" })
+                                .font(theme::semibold(17.0)),
+                        )
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(mode, false, "ChatGPT");
+                            ui.selectable_value(mode, true, "Codex");
+                        })
+                        .response
+                        .on_hover_text("Choose how much activity to show in chat");
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if icons::button(ui, Icon::Search, "Search chats").clicked() {
                             self.search_open = !self.search_open;

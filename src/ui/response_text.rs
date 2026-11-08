@@ -21,7 +21,15 @@ struct Appearance {
 }
 
 pub(super) fn show(ui: &mut egui::Ui, message: &Message, workspace: Option<&Path>) {
-    let source = &message.content;
+    show_text(ui, message.id, &message.content, workspace);
+}
+
+pub(super) fn show_text(
+    ui: &mut egui::Ui,
+    message_id: uuid::Uuid,
+    source: &str,
+    workspace: Option<&Path>,
+) {
     let accent = source.contains("67");
     let tooltip = source.contains("727");
     if !accent && !tooltip {
@@ -48,7 +56,7 @@ pub(super) fn show(ui: &mut egui::Ui, message: &Message, workspace: Option<&Path
 
     let id = ui
         .id()
-        .with(("response_text", context.viewport_id(), message.id));
+        .with(("response_text", context.viewport_id(), message_id));
     let frame = context.cumulative_frame_nr();
     let now = ui.input(|input| input.time);
     if accent {

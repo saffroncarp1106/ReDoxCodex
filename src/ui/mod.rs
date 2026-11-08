@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::ReDox;
 
+mod activity;
 mod agents;
 mod capture;
 mod claude;
@@ -18,6 +19,7 @@ mod media;
 pub(super) mod packs;
 mod picker;
 pub(super) mod project_window;
+mod queue;
 mod renderers;
 mod response_text;
 mod settings;
@@ -33,6 +35,7 @@ pub(super) const PREFERENCES_KEY: &str = "redox.ui.v1";
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub(super) struct Preferences {
+    pub codex_mode: bool,
     pub project_glow: project_window::Glow,
     pub text_colors: std::collections::BTreeMap<String, theme::TextColors>,
     pub ui: String,
@@ -48,6 +51,7 @@ pub(super) struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
+            codex_mode: false,
             project_glow: project_window::Glow::default(),
             text_colors: std::collections::BTreeMap::new(),
             ui: "codex".into(),

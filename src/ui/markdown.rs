@@ -24,6 +24,8 @@ pub(super) fn show_in_workspace(
     workspace: Option<&std::path::Path>,
 ) {
     let source = normalize_delimiters(source);
+    let error_id = ui.next_auto_id().with("file_link_error");
+    let command_start = ui.output_mut(|output| output.commands.len());
     let mut offset = 0;
     for reference in super::media::references(&source) {
         render(ui, &source[offset..reference.range.start]);
@@ -31,6 +33,38 @@ pub(super) fn show_in_workspace(
         offset = reference.range.end;
     }
     render(ui, &source[offset..]);
+    let file_links = ui.output_mut(|output| {
+        let mut file_links = Vec::new();
+        let new_commands = output.commands.split_off(command_start);
+        for command in new_commands {
+            match command {
+                egui::OutputCommand::OpenUrl(link) if redox::media::is_file_link(&link.url) => {
+                    file_links.push(link.url);
+                }
+                command => output.commands.push(command),
+            }
+        }
+        file_links
+    });
+    for link in file_links {
+        let destination = Parser::new(&source)
+            .into_offset_iter()
+            .find_map(|(event, range)| {
+                if let Event::Start(Tag::Link { dest_url, .. }) = event
+                    && dest_url.as_ref() == link
+                {
+                    Some(super::media::preserve_windows_path(&source[range], &link))
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(link);
+        let error = redox::media::open_file_link(&destination, workspace).err();
+        ui.data_mut(|data| data.insert_temp(error_id, error));
+    }
+    if let Some(Some(error)) = ui.data(|data| data.get_temp::<Option<String>>(error_id)) {
+        ui.colored_label(Color32::LIGHT_RED, format!("Could not open file: {error}"));
+    }
 }
 
 fn render(ui: &mut egui::Ui, source: &str) {

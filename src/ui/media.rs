@@ -47,7 +47,7 @@ pub(super) fn references(source: &str) -> Vec<Reference> {
     references
 }
 
-fn preserve_windows_path(markdown: &str, parsed: &str) -> String {
+pub(super) fn preserve_windows_path(markdown: &str, parsed: &str) -> String {
     let raw = markdown
         .rsplit_once("](")
         .map(|(_, destination)| destination);
@@ -63,7 +63,7 @@ fn preserve_windows_path(markdown: &str, parsed: &str) -> String {
         }
     });
     if let Some(raw) = raw
-        && raw.as_bytes().get(1) == Some(&b':')
+        && raw.trim_start_matches('/').as_bytes().get(1) == Some(&b':')
         && raw.contains('\\')
     {
         raw.replace('\\', "/")

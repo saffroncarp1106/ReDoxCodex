@@ -1,6 +1,63 @@
 use redox::codex::{ChatRequest, Feedback};
 use redox::domain::{MessageStatus, Session};
 use redox::run::{RunEvent, Update, apply_event};
+use std::time::{Duration, Instant};
+
+#[test]
+fn scheduled_prompt_waits_without_blocking_a_manual_send_or_losing_a_draft() {
+    let mut session = Session::default();
+    session.new_chat();
+    session.active_mut().unwrap().draft = "Scheduled".into();
+    let delayed = session
+        .queue_prompt_after(Duration::from_secs(600))
+        .unwrap();
+    let now = Instant::now();
+    assert_eq!(session.active().unwrap().ready_queued(now), None);
+    assert!(session.prepare_selected_run(Some(delayed)).is_err());
+
+    session.active_mut().unwrap().draft = "Send now".into();
+    let run = session.prepare_selected_run(None).unwrap();
+    assert!(
+        ChatRequest::from_chat(session.active().unwrap(), "test".into())
+            .prompt
+            .contains("Send now")
+    );
+    session.finish_run(run, MessageStatus::Complete, None);
+
+    let chat = session.active_mut().unwrap();
+    chat.draft = "Keep this draft".into();
+    chat.send_after.insert(delayed, now);
+    assert_eq!(chat.ready_queued(now), Some(delayed));
+    session.prepare_selected_run(Some(delayed)).unwrap();
+    let chat = session.active().unwrap();
+    assert!(chat.send_after.is_empty());
+    assert_eq!(chat.draft, "Keep this draft");
+    assert_eq!(
+        chat.messages
+            .iter()
+            .find(|m| m.id == delayed)
+            .unwrap()
+            .status,
+        MessageStatus::Complete
+    );
+}
+
+#[test]
+fn closing_redox_preserves_the_queued_text_without_auto_sending_on_restart() {
+    let mut session = Session::default();
+    session.new_chat();
+    session.active_mut().unwrap().draft = "Do this later".into();
+    session
+        .queue_prompt_after(Duration::from_secs(600))
+        .unwrap();
+    let mut restored: Session =
+        serde_json::from_str(&serde_json::to_string(&session).unwrap()).unwrap();
+    restored.recover();
+    let chat = restored.active().unwrap();
+    assert_eq!(chat.ready_queued(Instant::now()), None);
+    assert_eq!(chat.messages[0].status, MessageStatus::Interrupted);
+    assert_eq!(chat.messages[0].content, "Do this later");
+}
 
 #[test]
 fn project_branch_copies_completed_context_and_keeps_a_separate_chat() {

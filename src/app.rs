@@ -92,6 +92,7 @@ pub struct ReDox {
     run_receiver: tokio::sync::mpsc::Receiver<RunEvent>,
     running: Option<Running>,
     approval: Option<Approval>,
+    approval_details_open: bool,
     account: String,
     login_receiver: Option<tokio::sync::mpsc::Receiver<LoginEvent>>,
     login_task: Option<tokio::task::JoinHandle<()>>,
@@ -247,6 +248,7 @@ impl ReDox {
             running: None,
             project_windows: Vec::new(),
             approval: None,
+            approval_details_open: false,
             account: "Checking ChatGPT account...".into(),
             login_receiver: None,
             login_task: None,
@@ -418,40 +420,45 @@ impl ReDox {
             }
             return;
         }
-        if self.startup.is_active()
-            || self.running.is_some()
-            || self.runtime.is_none()
-            || self.picking_files
-            || self.history_reading.is_some()
+        if self.can_start_prompt()
+            && let Err(error) = self.start_prompt(context, None)
         {
-            return;
+            self.attachment_error = Some(error.clone());
+            self.status = error;
         }
-        self.attachment_error = None;
+    }
 
+    fn can_start_prompt(&self) -> bool {
+        !self.startup.is_active()
+            && self.running.is_none()
+            && self.runtime.is_some()
+            && !self.picking_files
+            && self.history_reading.is_none()
+    }
+
+    fn start_prompt(
+        &mut self,
+        context: &egui::Context,
+        queued: Option<uuid::Uuid>,
+    ) -> Result<(), String> {
         if let Err(error) = codex::validate_workspace(
             self.session
                 .active()
                 .and_then(|chat| chat.workspace.as_deref()),
         ) {
-            self.attachment_error = Some(error.clone());
-            self.status = error;
-            self.settings_page = ui::SettingsPage::Workspace;
-            self.settings_open = true;
-            return;
+            if queued.is_none() {
+                self.settings_page = ui::SettingsPage::Workspace;
+                self.settings_open = true;
+            }
+            return Err(error);
         }
 
-        let id = match self.session.prepare_run() {
-            Ok(id) => id,
-            Err(error) => {
-                self.attachment_error = Some(error.clone());
-                self.status = error;
-                return;
-            }
-        };
-
-        let Some(chat) = self.session.active() else {
-            return;
-        };
+        let runtime = self
+            .runtime
+            .as_ref()
+            .ok_or("Agent runtime is unavailable.")?;
+        let id = self.session.prepare_selected_run(queued)?;
+        let chat = self.session.active().ok_or("Create a chat first.")?;
 
         let request = if chat.provider == Provider::Ollama {
             let mut request = ollama::Request::from_chat(chat, self.session.ollama.clone());
@@ -472,22 +479,52 @@ impl ReDox {
             }
         };
 
-        if let Some(runtime) = &self.runtime {
-            let (desktop, activity) = request.desktop();
-            if desktop.enabled && redox::desktop::SUPPORTED {
-                self.desktop_overlay = Some(ui::desktop_overlay::Overlay::start(
-                    activity.clone(),
-                    self.startup.desktop_style(),
-                ));
-            }
-            self.running = Some(Running::start(
-                runtime,
-                id,
-                request,
-                self.run_sender.clone(),
-                context.clone(),
+        let (desktop, activity) = request.desktop();
+        if desktop.enabled && redox::desktop::SUPPORTED {
+            self.desktop_overlay = Some(ui::desktop_overlay::Overlay::start(
+                activity.clone(),
+                self.startup.desktop_style(),
             ));
-            self.status = "Generating...".into();
+        }
+        self.running = Some(Running::start(
+            runtime,
+            id,
+            request,
+            self.run_sender.clone(),
+            context.clone(),
+        ));
+        if queued.is_none() {
+            self.attachment_error = None;
+        }
+        self.status = "Generating...".into();
+        Ok(())
+    }
+
+    fn dispatch_queued_prompt(&mut self, context: &egui::Context) {
+        if !self.can_start_prompt() {
+            return;
+        }
+        let now = Instant::now();
+        let chats = || self.session.chats.iter().filter(|chat| !chat.archived);
+        let ready =
+            |chat: &redox::domain::Chat| chat.ready_queued(now).map(|message| (chat.id, message));
+        let next = self
+            .session
+            .active()
+            .filter(|chat| !chat.archived)
+            .and_then(ready)
+            .or_else(|| chats().find_map(ready));
+        if let Some((chat, message)) = next {
+            let selected = self.session.active_chat.replace(chat);
+            if let Err(error) = self.start_prompt(context, Some(message)) {
+                if let Some(chat) = self.session.active_mut() {
+                    chat.cancel_queued(message, format!("Queued message was not sent: {error}"));
+                }
+            }
+            self.session.active_chat = selected;
+            context.request_repaint();
+        } else if let Some(deadline) = chats().flat_map(|chat| chat.send_after.values()).min() {
+            context.request_repaint_after(deadline.saturating_duration_since(now));
         }
     }
 
@@ -919,6 +956,7 @@ impl ReDox {
                     }
                     Update::Approval(approval) => {
                         self.approval = Some(approval);
+                        self.approval_details_open = false;
                         self.status = "Waiting for your approval.".into();
                         continue;
                     }
@@ -952,27 +990,7 @@ impl ReDox {
                 if !local {
                     self.refresh_history(context, false);
                 }
-                let queued = |chat: &&redox::domain::Chat| {
-                    !chat.archived
-                        && chat
-                            .messages
-                            .iter()
-                            .any(|m| m.status == MessageStatus::Queued)
-                };
-                let next = self
-                    .session
-                    .chats
-                    .iter()
-                    .filter(queued)
-                    .find(|chat| chat.id == id.chat)
-                    .or_else(|| self.session.chats.iter().find(queued))
-                    .map(|chat| chat.id);
-                if completed && let Some(next) = next {
-                    let selected = self.session.active_chat;
-                    self.session.active_chat = Some(next);
-                    self.send_prompt(context);
-                    self.session.active_chat = selected;
-                } else if !completed {
+                if !completed {
                     self.session.stop_queued(id.chat);
                 }
             }
@@ -1193,7 +1211,9 @@ impl eframe::App for ReDox {
             self.scan_ui();
         }
 
-        if context.input(|input| input.key_pressed(egui::Key::Escape)) {
+        if context.input(|input| input.key_pressed(egui::Key::Escape))
+            && !egui::Popup::is_any_open(context)
+        {
             if self.settings_open {
                 self.settings_open = false;
             } else if self.usage_open {
@@ -1226,6 +1246,7 @@ impl eframe::App for ReDox {
         }
 
         self.draw_ui(context);
+        self.dispatch_queued_prompt(context);
         #[cfg(debug_assertions)]
         self.verify_ui_restart(context);
     }

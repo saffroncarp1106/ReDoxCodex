@@ -110,7 +110,14 @@ pub fn parse_turns(page: &Value, model: &str) -> Result<Vec<Message>, String> {
         let items = turn["items"]
             .as_array()
             .ok_or("Codex returned a turn without items.")?;
+        let turn_id = turn["id"].as_str().unwrap_or_default();
+        let mut activity = crate::activity::TurnActivity::default();
+        let mut last_reply = None;
         for item in items {
+            if let Some(command) = crate::activity::CommandActivity::from_item(item) {
+                activity.record_command(command);
+                continue;
+            }
             let (role, content) = match item["type"].as_str() {
                 Some("userMessage") => (
                     Role::User,
@@ -149,6 +156,12 @@ pub fn parse_turns(page: &Value, model: &str) -> Result<Vec<Message>, String> {
                 continue;
             }
             let failed = role == Role::Assistant && turn["status"] == "failed";
+            let activity = if role == Role::Assistant {
+                last_reply = Some(messages.len());
+                std::mem::take(&mut activity)
+            } else {
+                Default::default()
+            };
             messages.push(Message {
                 id: Uuid::new_v4(),
                 role,
@@ -169,7 +182,16 @@ pub fn parse_turns(page: &Value, model: &str) -> Result<Vec<Message>, String> {
                 },
                 model: model.to_owned(),
                 attachments: Vec::new(),
+                activity,
             });
+        }
+        if let Some(index) = last_reply {
+            let last = &mut messages[index];
+            last.activity.turn_id = turn_id.to_owned();
+            for mut command in activity.commands {
+                command.offset = last.content.len();
+                last.activity.record_command(command);
+            }
         }
     }
     Ok(messages)
@@ -201,7 +223,28 @@ pub fn import(session: &mut Session, page: ConversationPage, older: bool) -> Uui
             chat.workspace = Some(page.entry.cwd);
         }
         chat.archived = locally_archived.unwrap_or(page.archived);
-        chat.messages = page.messages;
+        let mut messages = page.messages;
+        for mut local in chat.messages.drain(..) {
+            if local.role == Role::User
+                && matches!(
+                    local.status,
+                    MessageStatus::Queued | MessageStatus::Interrupted
+                )
+            {
+                messages.push(local);
+            } else if !local.activity.turn_id.is_empty()
+                && let Some(imported) = messages
+                    .iter_mut()
+                    .find(|message| message.activity.turn_id == local.activity.turn_id)
+            {
+                imported.activity.files = std::mem::take(&mut local.activity.files);
+                imported.activity.preview_limited = local.activity.preview_limited;
+            }
+        }
+        chat.messages = messages;
+        if chat.archived {
+            chat.interrupt_queue("Chat was archived before this message was sent.");
+        }
     }
     chat.id
 }

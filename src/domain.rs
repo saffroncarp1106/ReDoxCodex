@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use crate::attachments::Attachment;
 use serde::{Deserialize, Serialize};
@@ -76,6 +77,11 @@ pub struct Message {
     pub model: String,
     #[serde(default)]
     pub attachments: Vec<Attachment>,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::activity::TurnActivity::is_empty"
+    )]
+    pub activity: crate::activity::TurnActivity,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -87,6 +93,8 @@ pub struct RunId {
 
 #[derive(Deserialize, Serialize)]
 pub struct Chat {
+    #[serde(skip)]
+    pub send_after: BTreeMap<Uuid, Instant>,
     #[serde(default)]
     pub desktop_tools: bool,
     #[serde(default)]
@@ -135,6 +143,7 @@ impl Chat {
             Mode::Chat
         };
         Self {
+            send_after: BTreeMap::new(),
             desktop_tools: false,
             delegation_tools: false,
             delegated_tasks: Vec::new(),
@@ -151,6 +160,41 @@ impl Chat {
             mode,
             attachments: Vec::new(),
             previous_thread_ids: Vec::new(),
+        }
+    }
+
+    pub fn ready_queued(&self, now: Instant) -> Option<Uuid> {
+        self.messages
+            .iter()
+            .find(|message| {
+                message.status == MessageStatus::Queued
+                    && self
+                        .send_after
+                        .get(&message.id)
+                        .is_none_or(|due| *due <= now)
+            })
+            .map(|message| message.id)
+    }
+
+    pub fn cancel_queued(&mut self, id: Uuid, reason: String) {
+        if let Some(message) = self
+            .messages
+            .iter_mut()
+            .find(|message| message.id == id && message.status == MessageStatus::Queued)
+        {
+            self.send_after.remove(&id);
+            message.status = MessageStatus::Interrupted;
+            message.error = Some(reason);
+        }
+    }
+
+    pub(crate) fn interrupt_queue(&mut self, reason: &str) {
+        self.send_after.clear();
+        for message in &mut self.messages {
+            if message.status == MessageStatus::Queued {
+                message.status = MessageStatus::Interrupted;
+                message.error = Some(reason.into());
+            }
         }
     }
 
@@ -225,7 +269,7 @@ impl Default for Session {
             workspace: None,
             codex_path: crate::codex::find_executable(),
             model: DEFAULT_MODEL.into(),
-            tool_access_version: 2,
+            tool_access_version: 3,
             model_efforts: BTreeMap::new(),
         }
     }
@@ -288,7 +332,7 @@ impl Session {
                 .sum::<usize>();
         if bytes > MAX_CONTEXT_BYTES {
             return Err(
-                "Queued feedback exceeds the 128 KiB text budget. Your draft is kept.".into(),
+                "Queued messages exceed the 128 KiB text budget. Your draft is kept.".into(),
             );
         }
         let id = Uuid::new_v4();
@@ -300,19 +344,28 @@ impl Session {
             error: None,
             model: String::new(),
             attachments: std::mem::take(&mut chat.attachments),
+            activity: Default::default(),
         });
         chat.draft.clear();
         Ok(id)
     }
 
+    pub fn queue_prompt_after(&mut self, delay: Duration) -> Result<Uuid, String> {
+        let deadline = Instant::now()
+            .checked_add(delay)
+            .ok_or("Delay is too long.")?;
+        let id = self.queue_prompt()?;
+        if !delay.is_zero()
+            && let Some(chat) = self.active_mut()
+        {
+            chat.send_after.insert(id, deadline);
+        }
+        Ok(id)
+    }
+
     pub fn stop_queued(&mut self, chat_id: Uuid) {
         if let Some(chat) = self.chats.iter_mut().find(|chat| chat.id == chat_id) {
-            for message in &mut chat.messages {
-                if message.status == MessageStatus::Queued {
-                    message.status = MessageStatus::Interrupted;
-                    message.error = Some("Feedback was not sent. Copy it to send again.".into());
-                }
-            }
+            chat.interrupt_queue("Queued message was not sent. Copy it to send again.");
         }
     }
 
@@ -344,6 +397,8 @@ impl Session {
             if self.tool_access_version < 2 {
                 chat.mode = Mode::Code;
                 chat.reset_server_thread();
+            } else if self.tool_access_version < 3 && chat.desktop_tools {
+                chat.reset_server_thread();
             }
             if chat.workspace.is_none() {
                 chat.set_mode(Mode::Chat);
@@ -353,8 +408,11 @@ impl Session {
                     message.status = MessageStatus::Interrupted;
                 }
             }
+            chat.interrupt_queue(
+                "ReDox closed before this message was sent. Copy it to send again.",
+            );
         }
-        self.tool_access_version = 2;
+        self.tool_access_version = 3;
 
         if self.active().is_none() {
             self.active_chat = self
@@ -366,6 +424,13 @@ impl Session {
     }
 
     pub fn prepare_run(&mut self) -> Result<RunId, String> {
+        let queued = self
+            .active()
+            .and_then(|chat| chat.ready_queued(Instant::now()));
+        self.prepare_selected_run(queued)
+    }
+
+    pub fn prepare_selected_run(&mut self, queued: Option<Uuid>) -> Result<RunId, String> {
         let desktop = self.desktop.enabled && crate::desktop::SUPPORTED;
         if let Some(chat) = self.active_mut()
             && chat.provider == Provider::Codex
@@ -407,10 +472,19 @@ impl Session {
         }
 
         let chat = self.active_mut().ok_or("Create a chat first.")?;
-        let queued = chat
-            .messages
-            .iter()
-            .position(|m| m.status == MessageStatus::Queued);
+        let queued = queued
+            .map(|id| {
+                chat.messages
+                    .iter()
+                    .position(|m| m.id == id && m.status == MessageStatus::Queued)
+                    .filter(|_| {
+                        chat.send_after
+                            .get(&id)
+                            .is_none_or(|due| *due <= Instant::now())
+                    })
+                    .ok_or("That queued message is no longer ready to send.")
+            })
+            .transpose()?;
         let prompt = queued.map_or_else(
             || chat.draft.trim().to_owned(),
             |i| chat.messages[i].content.clone(),
@@ -450,9 +524,14 @@ impl Session {
             );
         }
 
-        if chat.messages.is_empty() && chat.title == "New chat" {
+        if chat.title == "New chat"
+            && !chat
+                .messages
+                .iter()
+                .any(|message| message.status == MessageStatus::Complete)
+        {
             let title = if prompt.is_empty() {
-                chat.attachments[0].name()
+                attachments[0].name()
             } else {
                 prompt.clone()
             };
@@ -467,6 +546,7 @@ impl Session {
 
         if let Some(index) = queued {
             let mut message = chat.messages.remove(index);
+            chat.send_after.remove(&message.id);
             message.status = MessageStatus::Complete;
             message.error = None;
             message.model = model.clone();
@@ -480,6 +560,7 @@ impl Session {
                 error: None,
                 model: model.clone(),
                 attachments: std::mem::take(&mut chat.attachments),
+                activity: Default::default(),
             });
             chat.draft.clear();
         }
@@ -493,6 +574,7 @@ impl Session {
             error: None,
             model,
             attachments: Vec::new(),
+            activity: Default::default(),
         });
 
         Ok(RunId {
@@ -591,6 +673,9 @@ impl Session {
         }
         for chat in self.chats.iter_mut().filter(|chat| same(chat)) {
             chat.archived = archived;
+            if archived {
+                chat.interrupt_queue("Chat was archived before this message was sent.");
+            }
         }
         if let Some(thread) = thread {
             self.local_archive_overrides.insert(thread, archived);

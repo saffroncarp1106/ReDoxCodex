@@ -197,7 +197,7 @@ async fn disconnected_streams_fail_and_pre_cancelled_requests_do_not_connect() {
 #[tokio::test]
 async fn folderless_ollama_desktop_input_uses_shared_approval() {
     let call = json!({"message":{"role":"assistant","tool_calls":[{
-        "function":{"name":"desktop_control","arguments":{"action":"keypress","keys":["ESC"]}}
+        "function":{"name":"redox_remote_control","arguments":{"action":"keypress","keys":["ESC"]}}
     }]},"done":true});
     let reply = json!({"message":{"content":"Desktop input was declined."},"done":true});
     let (endpoint, captured, handle) = server(vec![
@@ -224,7 +224,7 @@ async fn folderless_ollama_desktop_input_uses_shared_approval() {
     let requests = captured.lock().unwrap();
     let tools = requests[1].1["tools"].as_array().unwrap();
     assert_eq!(tools.len(), 1);
-    assert_eq!(tools[0]["function"]["name"], "desktop_control");
+    assert_eq!(tools[0]["function"]["name"], "redox_remote_control");
     assert!(
         requests[2].1["messages"]
             .as_array()
@@ -248,7 +248,7 @@ fn desktop_screenshot_is_an_ollama_tool_message_with_an_image() {
         json!({"type":"inputImage","imageUrl":"data:image/jpeg;base64,YWJj"}),
     ]));
     assert_eq!(message["role"], "tool");
-    assert_eq!(message["tool_name"], "desktop_control");
+    assert_eq!(message["tool_name"], "redox_remote_control");
     assert_eq!(message["content"], "Origin (-1920, 0)");
     assert_eq!(message["images"], json!(["YWJj"]));
 }

@@ -11,6 +11,7 @@ fn assistant(content: &str) -> Message {
         error: None,
         model: String::new(),
         attachments: Vec::new(),
+        activity: Default::default(),
     }
 }
 

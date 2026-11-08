@@ -38,18 +38,39 @@ impl ReDox {
     pub(in crate::app) fn approval_dialog(&mut self, context: &egui::Context) {
         let mut decision = None;
         if let Some(approval) = &self.approval {
+            let mut open = true;
             let mut body = |ui: &mut egui::Ui| {
-                egui::ScrollArea::vertical()
-                    .max_height(300.0)
-                    .show(ui, |ui| {
-                        ui.add(
-                            egui::Label::new(&approval.description)
-                                .wrap()
-                                .selectable(true),
-                        );
-                    });
+                ui.label(egui::RichText::new(approval.summary).strong());
+                let details = if self.approval_details_open {
+                    "▾ Details"
+                } else {
+                    "▸ Details"
+                };
+                if ui.small_button(details).clicked() {
+                    self.approval_details_open = !self.approval_details_open;
+                }
+                if self.approval_details_open {
+                    egui::ScrollArea::vertical()
+                        .max_height(160.0)
+                        .show(ui, |ui| {
+                            ui.add(
+                                egui::Label::new(&approval.description)
+                                    .wrap()
+                                    .selectable(true),
+                            );
+                        });
+                }
+                ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    if ui.button("Approve once").clicked() {
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("Approve").color(egui::Color32::WHITE),
+                            )
+                            .fill(egui::Color32::from_rgb(39, 93, 188)),
+                        )
+                        .clicked()
+                    {
                         decision = Some(true);
                     }
                     if ui.button("Reject").clicked() {
@@ -58,22 +79,23 @@ impl ReDox {
                 });
             };
             if self.ui_preferences.floating_windows {
-                let mut open = true;
                 super::window_frame::native_popup(
                     context,
                     "native_approval",
                     "Assistant requests approval",
-                    egui::vec2(640.0, 420.0),
+                    egui::vec2(440.0, 300.0),
                     &mut open,
                     &mut body,
                 );
-                if !open {
-                    decision = Some(false);
-                }
             } else {
                 egui::Window::new("Assistant requests approval")
+                    .open(&mut open)
+                    .default_width(420.0)
                     .collapsible(false)
                     .show(context, body);
+            }
+            if !open {
+                decision = Some(false);
             }
         }
         if let Some(decision) = decision

@@ -154,6 +154,7 @@ async fn disabled_cancelled_and_denied_actions_cannot_reach_the_desktop() {
         execute(
             &json!({"action":"screenshot"}),
             &Settings::default(),
+            Mode::Code,
             &mut approved,
             &sender,
             receiver.clone(),
@@ -172,6 +173,7 @@ async fn disabled_cancelled_and_denied_actions_cannot_reach_the_desktop() {
         execute(
             &json!({"action":"screenshot"}),
             &settings,
+            Mode::Code,
             &mut approved,
             &sender,
             receiver,
@@ -189,6 +191,7 @@ async fn disabled_cancelled_and_denied_actions_cannot_reach_the_desktop() {
     let execution = execute(
         &arguments,
         &settings,
+        Mode::Code,
         &mut approved,
         &sender,
         receiver,
@@ -224,6 +227,7 @@ async fn approval_does_not_type_into_the_window_that_received_the_approval_click
     let execution = execute(
         &arguments,
         &settings,
+        Mode::Code,
         &mut approved,
         &sender,
         receiver,
@@ -244,6 +248,38 @@ async fn approval_does_not_type_into_the_window_that_received_the_approval_click
             .unwrap()
             .contains("No input was sent")
     );
+    assert!(events.try_recv().is_err());
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn full_access_bypasses_remote_input_approval_when_remote_control_is_enabled() {
+    let activity = Activity::default();
+    let (sender, mut events) = mpsc::channel(4);
+    let (_cancel, receiver) = watch::channel(false);
+    let mut approved = false;
+    let args = json!({"action":"focus","window":0});
+    let settings = Settings {
+        enabled: true,
+        confirm_actions: true,
+    };
+    // A null window is rejected by Windows before any focus or input is sent.
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        execute(
+            &args,
+            &settings,
+            Mode::FullAccess,
+            &mut approved,
+            &sender,
+            receiver,
+            &activity,
+        ),
+    )
+    .await
+    .expect("Full access must not wait for an approval decision");
+    assert!(result.unwrap_err().contains("Window no longer exists"));
+    assert!(matches!(events.try_recv(), Ok(ProviderEvent::Status(_))));
     assert!(events.try_recv().is_err());
 }
 

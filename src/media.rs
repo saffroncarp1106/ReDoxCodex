@@ -1,5 +1,5 @@
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use base64::Engine;
 use serde_json::Value;
@@ -7,13 +7,100 @@ use serde_json::Value;
 pub fn open_media(destination: &str) -> Result<(), String> {
     let url = url::Url::parse(destination).map_err(|error| error.to_string())?;
     match url.scheme() {
-        "file" => {
-            let path = url.to_file_path().map_err(|_| "Invalid media path.")?;
-            open::that_detached(path).map_err(|error| error.to_string())
-        }
+        "file" => open_file_link(destination, None),
         "http" | "https" => open::that_detached(destination).map_err(|error| error.to_string()),
         _ => Err("Unsupported media URL.".into()),
     }
+}
+
+pub fn is_file_link(destination: &str) -> bool {
+    if destination.is_empty() || destination.starts_with('#') {
+        return false;
+    }
+    let path = strip_line_numbers(destination.split('#').next().unwrap_or(destination));
+    if is_windows_drive(path) {
+        return true;
+    }
+    match url::Url::parse(path) {
+        Ok(url) => url.scheme() == "file",
+        Err(url::ParseError::RelativeUrlWithoutBase) => true,
+        Err(_) => false,
+    }
+}
+
+pub fn open_file_link(destination: &str, workspace: Option<&Path>) -> Result<(), String> {
+    let path = resolve_file_link(destination, workspace)?;
+    open::that_detached(&path).map_err(|error| format!("{}: {error}", path.display()))
+}
+
+fn resolve_file_link(destination: &str, workspace: Option<&Path>) -> Result<PathBuf, String> {
+    if !is_file_link(destination) {
+        return Err("Unsupported file link.".into());
+    }
+    let without_fragment = destination
+        .split_once('#')
+        .map_or(destination, |(path, _)| path);
+    let without_position = strip_line_numbers(without_fragment);
+    let mut last_error = String::new();
+    for target in std::iter::once(destination)
+        .chain((without_position != destination).then_some(without_position))
+    {
+        let decoded = percent_encoding::percent_decode_str(target).decode_utf8_lossy();
+        let encoded_path = !target
+            .get(..5)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("file:"))
+            && decoded != target;
+        for candidate in std::iter::once(target).chain(encoded_path.then_some(decoded.as_ref())) {
+            let path = file_link_path(candidate, workspace)?;
+            match std::fs::metadata(&path) {
+                Ok(_) => return Ok(path),
+                Err(error) => last_error = format!("{}: {error}", path.display()),
+            }
+        }
+    }
+    Err(last_error)
+}
+
+fn file_link_path(target: &str, workspace: Option<&Path>) -> Result<PathBuf, String> {
+    if target
+        .get(..5)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("file:"))
+    {
+        return url::Url::parse(target)
+            .ok()
+            .and_then(|url| url.to_file_path().ok())
+            .ok_or_else(|| "Invalid file URL.".into());
+    }
+    let path = target
+        .strip_prefix('/')
+        .filter(|path| cfg!(windows) && is_windows_drive(path))
+        .unwrap_or(target);
+    let path = Path::new(path);
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        Ok(workspace
+            .ok_or("This relative link needs a project folder.")?
+            .join(path))
+    }
+}
+
+fn is_windows_drive(path: &str) -> bool {
+    matches!(path.as_bytes(), [letter, b':', b'/' | b'\\', ..] if letter.is_ascii_alphabetic())
+}
+
+fn strip_line_numbers(mut path: &str) -> &str {
+    for _ in 0..2 {
+        if let Some((name, suffix)) = path.rsplit_once(':')
+            && !suffix.is_empty()
+            && suffix.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            path = name;
+        } else {
+            break;
+        }
+    }
+    path
 }
 
 pub fn image_markdown(source: &str) -> String {

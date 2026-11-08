@@ -323,7 +323,7 @@ impl ReDox {
             ui.colored_label(Color32::LIGHT_RED, "This chat's project folder no longer exists. Select a valid project and use it for this chat.");
         }
         ui.add_space(20.0);
-        ui.label(RichText::new("Desktop control").font(theme::semibold(14.0)));
+        ui.label(RichText::new("ReDox Remote control").font(theme::semibold(14.0)));
         ui.add_enabled_ui(redox::desktop::SUPPORTED && self.running.is_none(), |ui| {
             ui.checkbox(
                 &mut self.session.desktop.enabled,
@@ -332,14 +332,14 @@ impl ReDox {
             ui.add_enabled_ui(self.session.desktop.enabled, |ui| {
                 ui.checkbox(
                     &mut self.session.desktop.confirm_actions,
-                    "Ask before mouse and keyboard control each response",
+                    "Ask before mouse and keyboard input outside Full access",
                 );
             });
         });
         ui.label(RichText::new(if redox::desktop::SUPPORTED {
-            "Codex and Ollama can capture screens, focus windows, and use the mouse and keyboard. Ollama requires a model with both vision and tool calling. Screenshots go to the selected provider, including the configured Ollama server. Use Stop to cancel, or hold Escape to block desktop actions. This setting is separate from project file access and applies on the next response."
+            "ReDox lets Codex and Ollama capture screens, focus windows, and use the mouse and keyboard. Full access skips the remote input prompt when Remote control is enabled. Ollama requires vision and tool calling. Screenshots go to the selected provider. Use Stop or hold Escape to stop remote input. Changes apply on the next response."
         } else {
-            "Native desktop control currently supports Windows. Other platforms retain their existing chat and project features."
+            "ReDox Remote control currently supports Windows."
         }).small().color(muted()));
         ui.add_space(20.0);
         ui.label(RichText::new("Current chat permissions").font(theme::semibold(14.0)));

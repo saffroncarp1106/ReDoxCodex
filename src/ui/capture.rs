@@ -62,6 +62,7 @@ impl ReDox {
                             error: None,
                             model: "Formatting preview".into(),
                             attachments: Vec::new(),
+                            activity: Default::default(),
                         });
                     }
                 }
@@ -88,6 +89,7 @@ impl ReDox {
                                 error: None,
                                 model: "Local media preview".into(),
                                 attachments: Vec::new(),
+                                activity: Default::default(),
                             });
                         }
                     }

@@ -890,6 +890,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
+name = "dunce"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
+
+[[package]]
 name = "ecolor"
 version = "0.33.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1283,31 +1289,6 @@ name = "foreign-types-shared"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
-
-[[package]]
-name = "redox"
-version = "0.1.0"
-dependencies = [
- "arboard",
- "base64 0.22.1",
- "dirs",
- "eframe",
- "egui_commonmark",
- "egui_extras",
- "image",
- "latex-rust",
- "open",
- "pulldown-cmark",
- "reqwest",
- "rfd",
- "serde",
- "serde_json",
- "tokio",
- "url",
- "uuid",
- "windows-sys 0.61.2",
- "winresource",
-]
 
 [[package]]
 name = "form_urlencoded"
@@ -2604,6 +2585,7 @@ version = "5.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d8c8b8e725ad26404d6896eb2f064294a0a7b4f1d9120210d85544684c4ca95"
 dependencies = [
+ "dunce",
  "is-wsl",
  "libc",
 ]
@@ -3085,6 +3067,32 @@ name = "raw-window-handle"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
+
+[[package]]
+name = "redox"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "base64 0.22.1",
+ "dirs",
+ "eframe",
+ "egui_commonmark",
+ "egui_extras",
+ "image",
+ "latex-rust",
+ "open",
+ "percent-encoding",
+ "pulldown-cmark",
+ "reqwest",
+ "rfd",
+ "serde",
+ "serde_json",
+ "tokio",
+ "url",
+ "uuid",
+ "windows-sys 0.61.2",
+ "winresource",
+]
 
 [[package]]
 name = "redox_syscall"

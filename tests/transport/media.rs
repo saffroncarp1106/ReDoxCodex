@@ -2,6 +2,33 @@ use super::*;
 use serde_json::json;
 
 #[test]
+fn editor_links_resolve_to_real_files_before_opening_the_os_association() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = root.join("src/main.rs");
+    let file_url = url::Url::from_file_path(&source).unwrap();
+    for link in [
+        "src/main.rs:12:4".into(),
+        "src/main.rs:12#L12".into(),
+        format!("{file_url}#L12"),
+        format!("{}:12", source.display()),
+    ] {
+        assert!(is_file_link(&link), "{link}");
+        assert_eq!(resolve_file_link(&link, Some(root)).unwrap(), source);
+    }
+    #[cfg(windows)]
+    assert_eq!(
+        resolve_file_link(&format!("/{}:12", source.display()), None).unwrap(),
+        source,
+    );
+    assert_eq!(
+        resolve_file_link("Launch%20ReDox.cmd", Some(root)).unwrap(),
+        root.join("Launch ReDox.cmd"),
+    );
+    assert!(resolve_file_link("missing-page.html", Some(root)).is_err());
+    assert!(!is_file_link("https://example.com/page.html"));
+}
+
+#[test]
 fn macos_and_linux_image_paths_are_preserved() {
     for path in [
         "/Users/name/.codex/generated_images/dog.png",

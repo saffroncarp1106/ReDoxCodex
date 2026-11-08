@@ -261,7 +261,7 @@ mod windows {
                     dc,
                     (rect.left + rect.right) / 2 - 140,
                     rect.top + 18,
-                    "ReDox desktop control  |  Esc to stop",
+                    "ReDox remote control  |  Esc to stop",
                     Color32::WHITE,
                 );
             }

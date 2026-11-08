@@ -145,33 +145,14 @@ impl ReDox {
                         ui.add_space(20.0);
                     });
                     self.claude_centered_composer(ui, context);
-                } else {
-                    ui.spacing_mut().scroll = theme::conversation_scroll();
-                    egui::ScrollArea::vertical()
-                        .id_salt(("claude_chat", self.session.active_chat))
-                        .stick_to_bottom(true)
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            let width = (ui.available_width() - 48.0).clamp(260.0, 820.0);
-                            let offset = (ui.available_width() - width) * 0.5;
-                            ui.horizontal_top(|ui| {
-                                ui.add_space(offset);
-                                ui.vertical(|ui| {
-                                    ui.set_width(width);
-                                    ui.add_space(20.0);
-                                    if let Some(chat) = self.session.active() {
-                                        for message in &chat.messages {
-                                            super::conversation::render_message(
-                                                ui,
-                                                message,
-                                                chat.workspace.as_deref(),
-                                            );
-                                            ui.add_space(26.0);
-                                        }
-                                    }
-                                });
-                            });
-                        });
+                } else if let Some(chat) = self.session.active() {
+                    super::conversation::render_transcript(
+                        ui,
+                        chat,
+                        ("claude_chat", self.session.active_chat),
+                        48.0,
+                        self.ui_preferences.codex_mode,
+                    );
                 }
             });
     }
@@ -309,6 +290,7 @@ impl ReDox {
                     .on_hover_text("No project folder");
             }
         });
+        self.queued_messages(ui);
         if let Some(error) = &self.attachment_error {
             ui.colored_label(Color32::LIGHT_RED, error);
         }
@@ -395,9 +377,11 @@ impl ReDox {
         }
         let ready = self.session.active().is_some_and(|chat| {
             !chat.archived && (!chat.draft.trim().is_empty() || !chat.attachments.is_empty())
-        });
+        }) && self.runtime.is_some()
+            && !self.picking_files;
         ui.add_enabled_ui(ready, |ui| {
-            let (rect, response) = ui.allocate_exact_size(vec2(26.0, 24.0), Sense::click());
+            let (rect, response) =
+                ui.allocate_exact_size(vec2(26.0, 24.0), Sense::click_and_drag());
             let color = if ready { theme::text() } else { theme::muted() };
             let center = rect.center();
             for line in [
@@ -415,10 +399,9 @@ impl ReDox {
                 ui.painter()
                     .add(egui::Shape::line(line, Stroke::new(1.5, color)));
             }
-            response.on_hover_text("Send message · Enter (Shift+Enter for a new line)")
+            ready && self.queue_send_control(response)
         })
         .inner
-        .clicked()
     }
 
     fn claude_voice_controls(&self, ui: &mut egui::Ui, microphone: bool) {

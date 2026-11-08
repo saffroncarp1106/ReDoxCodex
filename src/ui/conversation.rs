@@ -4,7 +4,7 @@ use crate::app::ReDox;
 use eframe::egui::{
     self, Align, Color32, FontId, Frame, Layout, Margin, RichText, Sense, Stroke, vec2,
 };
-use redox::domain::{Message, MessageStatus, Mode, Role};
+use redox::domain::{Chat, Message, MessageStatus, Mode, Role};
 
 impl ReDox {
     pub(in crate::app) fn conversation(&mut self, context: &egui::Context) {
@@ -102,27 +102,7 @@ impl ReDox {
                     return;
                 }
 
-                ui.spacing_mut().scroll = theme::conversation_scroll();
-                egui::ScrollArea::vertical()
-                    .id_salt(chat.id)
-                    .stick_to_bottom(true)
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        let content_width = ui.available_width().min(820.0);
-                        let margin = (ui.available_width() - content_width) * 0.5;
-                        ui.horizontal_top(|ui| {
-                            ui.add_space(margin);
-                            ui.vertical(|ui| {
-                                ui.set_width(content_width);
-                                ui.add_space(10.0);
-                                for message in &chat.messages {
-                                    render_message(ui, message, chat.workspace.as_deref());
-                                    ui.add_space(26.0);
-                                }
-                                ui.add_space(16.0);
-                            });
-                        });
-                    });
+                render_transcript(ui, chat, chat.id, 0.0, self.ui_preferences.codex_mode);
             });
     }
 
@@ -290,8 +270,13 @@ impl ReDox {
                                                 || !chat.attachments.is_empty())
                                     });
                                 let running = self.active_chat_running();
+                                let sense = if can_send {
+                                    Sense::click_and_drag()
+                                } else {
+                                    Sense::click()
+                                };
                                 let (rect, response) =
-                                    ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
+                                    ui.allocate_exact_size(vec2(28.0, 28.0), sense);
                                 let fill = if can_send || running {
                                     theme::blue()
                                 } else {
@@ -312,19 +297,10 @@ impl ReDox {
                                         text(),
                                     );
                                 }
-                                if response
-                                    .on_hover_text(if running && !can_send {
-                                        "Stop response"
-                                    } else {
-                                        "Send message"
-                                    })
-                                    .clicked()
-                                {
-                                    if running && !can_send {
-                                        stop = true;
-                                    } else if can_send {
-                                        send = true;
-                                    }
+                                if can_send {
+                                    send |= self.queue_send_control(response);
+                                } else if running {
+                                    stop |= response.on_hover_text("Stop response").clicked();
                                 }
                                 if running
                                     && can_send
@@ -343,6 +319,7 @@ impl ReDox {
                             });
                         });
                     });
+                self.queued_messages(ui);
                 if self.active_chat_running() {
                     ui.add(
                         egui::Label::new(RichText::new(&self.status).size(12.0).color(muted()))
@@ -371,44 +348,104 @@ impl ReDox {
     }
 }
 
-pub(super) fn render_message(
+pub(super) fn render_transcript(
+    ui: &mut egui::Ui,
+    chat: &Chat,
+    scroll_id: impl std::hash::Hash,
+    horizontal_padding: f32,
+    codex_mode: bool,
+) {
+    ui.spacing_mut().scroll = theme::conversation_scroll();
+    egui::ScrollArea::vertical()
+        .id_salt(scroll_id)
+        .horizontal_scroll_offset(0.0)
+        .stick_to_bottom(true)
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            let available = ui.available_rect_before_wrap();
+            let width = (available.width() - horizontal_padding)
+                .clamp(260.0, 820.0)
+                .min(available.width());
+            let left = available.center().x - width * 0.5;
+            let right = left + width;
+            ui.add_space(16.0);
+            for message in &chat.messages {
+                let top = ui.next_widget_position().y;
+                let bounds = egui::Rect::from_min_max(
+                    egui::pos2(left, top),
+                    egui::pos2(right, available.bottom().max(top)),
+                );
+                let mut row = ui.new_child(
+                    egui::UiBuilder::new()
+                        .id_salt(message.id)
+                        .max_rect(bounds)
+                        .layout(Layout::top_down(Align::Min)),
+                );
+                let clip = ui.clip_rect();
+                row.set_clip_rect(clip.intersect(egui::Rect::from_min_max(
+                    egui::pos2(left, clip.top()),
+                    egui::pos2(right, clip.bottom()),
+                )));
+                render_message(&mut row, message, chat.workspace.as_deref(), codex_mode);
+                // An oversized message must not widen the layout used for the next row.
+                ui.advance_cursor_after_rect(egui::Rect::from_min_max(
+                    bounds.min,
+                    egui::pos2(right, row.min_rect().bottom()),
+                ));
+                ui.add_space(26.0);
+            }
+            ui.add_space(16.0);
+        });
+}
+
+fn render_message(
     ui: &mut egui::Ui,
     message: &Message,
     workspace: Option<&std::path::Path>,
+    codex_mode: bool,
 ) {
     if message.role == Role::User {
-        ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
+        let bubble_width = ui.available_width() * 0.72;
+        ui.with_layout(Layout::top_down(Align::Max), |ui| {
             Frame::new()
                 .fill(Color32::from_rgb(25, 62, 116))
                 .corner_radius(19)
                 .inner_margin(Margin::symmetric(15, 10))
                 .show(ui, |ui| {
-                    ui.set_max_width((ui.available_width() * 0.72).max(180.0));
-                    for file in &message.attachments {
-                        if file.text.is_none() {
-                            super::media::show(ui, &file.path.to_string_lossy(), false, workspace);
+                    ui.with_layout(Layout::top_down(Align::Min), |ui| {
+                        ui.set_max_width(bubble_width.min(ui.available_width()));
+                        for file in &message.attachments {
+                            if file.text.is_none() {
+                                super::media::show(
+                                    ui,
+                                    &file.path.to_string_lossy(),
+                                    false,
+                                    workspace,
+                                );
+                            }
+                            ui.label(
+                                RichText::new(format!("▧ {}", file.name()))
+                                    .size(12.0)
+                                    .color(Color32::from_gray(215)),
+                            );
                         }
-                        ui.label(
-                            RichText::new(format!("▧ {}", file.name()))
-                                .size(12.0)
-                                .color(Color32::from_gray(215)),
-                        );
-                    }
-                    ui.push_id(message.id, |ui| {
-                        super::markdown::show_in_workspace(ui, &message.content, workspace)
+                        ui.push_id(message.id, |ui| {
+                            super::markdown::show_in_workspace(ui, &message.content, workspace)
+                        });
+                        if message.status == MessageStatus::Queued && message.error.is_none() {
+                            ui.label(RichText::new("Pending").small());
+                        }
+                        if let Some(error) = &message.error {
+                            ui.label(RichText::new(error).small());
+                        }
                     });
-                    if message.status == MessageStatus::Queued && message.error.is_none() {
-                        ui.label(RichText::new("Pending").small());
-                    }
-                    if let Some(error) = &message.error {
-                        ui.label(RichText::new(error).small());
-                    }
                 });
         });
         return;
     }
 
-    if message.content.is_empty() && message.status == MessageStatus::Streaming {
+    let show_activity = codex_mode && !message.activity.is_empty();
+    if message.content.is_empty() && message.status == MessageStatus::Streaming && !show_activity {
         ui.horizontal(|ui| {
             ui.add(egui::Spinner::new().size(14.0));
             ui.label(RichText::new("Working...").color(muted()));
@@ -418,7 +455,35 @@ pub(super) fn render_message(
             ui.label(RichText::new(&message.model).small().color(muted()));
         }
         ui.push_id(message.id, |ui| {
-            super::response_text::show(ui, message, workspace);
+            if show_activity {
+                let mut start = 0;
+                for (index, command) in message.activity.commands.iter().enumerate() {
+                    if let Some(text) = message.content.get(start..command.offset) {
+                        if !text.is_empty() {
+                            ui.push_id(index, |ui| {
+                                super::response_text::show_text(ui, message.id, text, workspace);
+                            });
+                        }
+                        start = command.offset;
+                    }
+                    super::activity::command(
+                        ui,
+                        command,
+                        message.status == MessageStatus::Streaming,
+                    );
+                }
+                if start < message.content.len() {
+                    super::response_text::show_text(
+                        ui,
+                        message.id,
+                        &message.content[start..],
+                        workspace,
+                    );
+                }
+                super::activity::changes(ui, &message.activity);
+            } else {
+                super::response_text::show(ui, message, workspace);
+            }
         });
     }
 
@@ -438,3 +503,7 @@ pub(super) fn render_message(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/ui/transcript_layout.rs"]
+mod layout_tests;
