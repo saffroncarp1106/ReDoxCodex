@@ -13,8 +13,8 @@ use crate::usage::UsageInfo;
 
 const CLI_NAME: &str = if cfg!(windows) { "codex.exe" } else { "codex" };
 
-const MAX_RECORD_BYTES: usize = 8 * 1024 * 1024;
-const MAX_ANSWER_BYTES: usize = 2 * 1024 * 1024;
+const MAX_RECORD_BYTES: usize = 16 * 1024 * 1024;
+const MAX_ANSWER_BYTES: usize = 8 * 1024 * 1024;
 
 pub fn validate_workspace(path: Option<&Path>) -> Result<(), String> {
     if let Some(path) = path

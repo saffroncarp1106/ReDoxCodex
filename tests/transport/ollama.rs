@@ -56,26 +56,213 @@ pub(crate) fn server(
 }
 
 fn request(endpoint: String, tools: bool) -> Request {
-    let mut chat = Chat::new(None);
-    chat.set_provider(crate::domain::Provider::Ollama, "qwen-test:latest".into());
-    chat.draft = "test".into();
-    Request {
-        settings: Settings {
-            endpoint,
-            project_tools: tools,
-            ..Settings::default()
-        },
-        model: chat.ollama_model,
-        workspace: None,
-        mode: Mode::Chat,
-        desktop: Default::default(),
-        desktop_activity: Default::default(),
-        messages: vec![InputMessage {
-            role: "user",
-            content: "Hello".into(),
-            images: Vec::new(),
-        }],
-    }
+	let mut chat = Chat::new(None);
+	chat.set_provider(crate::domain::Provider::Ollama, "qwen-test:latest".into());
+	chat.draft = "test".into();
+	Request {
+		settings: Settings {
+			endpoint,
+			project_tools: tools,
+			..Settings::default()
+		},
+		model: chat.ollama_model,
+		workspace: None,
+		mode: Mode::Chat,
+		desktop: Default::default(),
+		desktop_activity: Default::default(),
+		messages: vec![InputMessage {
+			role: "user",
+			content: "Hello".into(),
+			images: Vec::new(),
+		}],
+		checkpoint: Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("temp/verification/ollama-state").join(uuid::Uuid::new_v4().to_string()).join("steps.md")),
+	}
+}
+
+fn project_request(endpoint: String) -> Request {
+	let mut request = request(endpoint, true);
+	let root = request.checkpoint.as_ref().unwrap().parent().unwrap().join("project");
+	std::fs::create_dir_all(&root).unwrap();
+	std::fs::write(root.join("note.txt"), "READ_CONFIRMED").unwrap();
+	request.workspace = Some(root);
+	request.settings.context_tokens = 32768;
+	request
+}
+
+fn read_reply(count: usize) -> String {
+	let calls = (0..count).map(|_| json!({"function":{"name":"read_file","arguments":{"path":"note.txt"}}})).collect::<Vec<_>>();
+	format!("{}\n", json!({"message":{"content":"","tool_calls":calls},"done":true,"eval_count":1}))
+}
+
+fn text_reply(text: &str) -> String {
+	format!("{}\n", json!({"message":{"content":text},"done":true,"eval_count":1}))
+}
+
+#[tokio::test]
+async fn agent_continues_beyond_sixteen_rounds_and_tool_calls() {
+	let mut responses = vec![("/api/show", json!({"capabilities":["tools"]}).to_string())];
+	responses.push(("/api/chat", read_reply(17)));
+	for _ in 0..18 {
+		responses.push(("/api/chat", read_reply(1)));
+	}
+	responses.push(("/api/chat", text_reply("FINISHED")));
+	let (endpoint, captured, handle) = server(responses);
+	let request = project_request(endpoint);
+	let checkpoint = request.checkpoint.clone().unwrap();
+	let (sender, mut events) = mpsc::channel(256);
+	let (_cancel, receiver) = watch::channel(false);
+	stream_chat(request, sender, receiver).await.unwrap();
+	handle.join().unwrap();
+
+	{
+		let calls = captured.lock().unwrap();
+		assert_eq!(calls.len(), 21);
+		assert_eq!(calls.last().unwrap().1["messages"].as_array().unwrap().iter().filter(|message| message["role"] == "tool").count(), 35);
+	}
+	let saved = std::fs::read_to_string(checkpoint).unwrap();
+	assert!(saved.contains("Status: complete"));
+	assert!(saved.contains("READ_CONFIRMED"));
+	let mut requests = 0;
+	while let Some(event) = events.recv().await {
+		if let ProviderEvent::Metrics(stats) = event {
+			requests += stats.requests;
+		}
+	}
+	assert_eq!(requests, 20);
+}
+
+#[tokio::test]
+async fn context_rollover_saves_progress_and_reload_recalls_the_next_task() {
+	let (endpoint, captured, handle) = server(vec![
+		("/api/show", json!({"capabilities":["tools"]}).to_string()),
+		("/api/chat", read_reply(1)),
+		("/api/chat", text_reply("CHECKPOINT_MARKER: note.txt was read. Next: report the result; no edits made.")),
+		("/api/chat", text_reply("Result reported.")),
+	]);
+	let mut request = project_request(endpoint);
+	request.settings.output_tokens = 2048;
+	std::fs::write(request.workspace.as_ref().unwrap().join("note.txt"), "PROJECT_DATA ".repeat(4000)).unwrap();
+	let checkpoint = request.checkpoint.clone().unwrap();
+	let workspace = request.workspace.clone();
+	let (sender, mut events) = mpsc::channel(128);
+	let (_cancel, receiver) = watch::channel(false);
+	stream_chat(request, sender, receiver).await.unwrap();
+	handle.join().unwrap();
+
+	{
+		let calls = captured.lock().unwrap();
+		assert_eq!(calls[2].1["stream"], false);
+		assert!(calls[2].1.get("tools").is_none());
+		let messages: Vec<Value> = serde_json::from_value(calls[3].1["messages"].clone()).unwrap();
+		assert!(messages.iter().any(|message| message["content"].as_str().is_some_and(|text| text.contains("CHECKPOINT_MARKER"))));
+		assert!(messages.iter().all(|message| message["role"] != "tool" && message.get("tool_calls").is_none()));
+		assert!(state::prompt_size(&messages, &calls[3].1["tools"]) <= state::input_budget(32768, 2048));
+	}
+	let mut requests = 0;
+	while let Some(event) = events.recv().await {
+		if let ProviderEvent::Metrics(stats) = event {
+			requests += stats.requests;
+		}
+	}
+	assert_eq!(requests, 3);
+
+	let (endpoint, captured, handle) = server(vec![
+		("/api/show", json!({"capabilities":["tools"]}).to_string()),
+		("/api/chat", text_reply("Resumed.")),
+	]);
+	let mut next = project_request(endpoint);
+	next.checkpoint = Some(checkpoint);
+	next.workspace = workspace;
+	next.messages[0].content = "Continue with the next task.".into();
+	let (sender, _events) = mpsc::channel(128);
+	let (_cancel, receiver) = watch::channel(false);
+	stream_chat(next, sender, receiver).await.unwrap();
+	handle.join().unwrap();
+	let calls = captured.lock().unwrap();
+	assert!(calls[1].1["messages"].to_string().contains("CHECKPOINT_MARKER"));
+	assert!(calls[1].1["messages"].to_string().contains("Continue with the next task."));
+}
+
+#[tokio::test]
+async fn token_limited_output_continues_without_executing_incomplete_tools() {
+	let partial = json!({"message":{"content":"Work in progress", "tool_calls":[{"function":{"name":"write_file","arguments":{"path":"never.txt","content":"unfinished"}}}]},"done":true,"done_reason":"length"});
+	let (endpoint, captured, handle) = server(vec![
+		("/api/show", json!({"capabilities":["tools"]}).to_string()),
+		("/api/chat", format!("{partial}\n")),
+		("/api/chat", text_reply("Now finished.")),
+	]);
+	let mut request = project_request(endpoint);
+	request.mode = Mode::FullAccess;
+	let root = request.workspace.clone().unwrap();
+	let (sender, _events) = mpsc::channel(128);
+	let (_cancel, receiver) = watch::channel(false);
+	stream_chat(request, sender, receiver).await.unwrap();
+	handle.join().unwrap();
+
+	assert!(!root.join("never.txt").exists());
+	let calls = captured.lock().unwrap();
+	assert!(calls[2].1["messages"].to_string().contains("Continue the unfinished task"));
+	assert!(calls[2].1["messages"].as_array().unwrap().iter().all(|message| message.get("tool_calls").is_none()));
+}
+
+#[tokio::test]
+async fn failed_context_summary_preserves_the_action_results_in_steps() {
+	let (endpoint, _, handle) = server(vec![
+		("/api/show", json!({"capabilities":["tools"]}).to_string()),
+		("/api/chat", read_reply(1)),
+		("/api/chat", text_reply("")),
+	]);
+	let request = project_request(endpoint);
+	std::fs::write(request.workspace.as_ref().unwrap().join("note.txt"), "RECOVERABLE_DATA ".repeat(4000)).unwrap();
+	let checkpoint = request.checkpoint.clone().unwrap();
+	let (sender, _events) = mpsc::channel(128);
+	let (_cancel, receiver) = watch::channel(false);
+	let error = stream_chat(request, sender, receiver).await.unwrap_err();
+	handle.join().unwrap();
+
+	assert!(error.contains("could not summarize"));
+	let saved = std::fs::read_to_string(checkpoint).unwrap();
+	assert!(saved.contains("Tool result: read_file"));
+	assert!(saved.contains("RECOVERABLE_DATA"));
+	assert!(saved.contains("Status: in progress"));
+}
+
+#[tokio::test]
+async fn cancellation_keeps_the_pending_action_for_a_later_resume() {
+	let call = json!({"message":{"tool_calls":[{"function":{"name":"write_file","arguments":{"path":"pending.txt","content":"not approved"}}}]},"done":true});
+	let (endpoint, _, handle) = server(vec![
+		("/api/show", json!({"capabilities":["tools"]}).to_string()),
+		("/api/chat", format!("{call}\n")),
+	]);
+	let mut request = project_request(endpoint);
+	request.mode = Mode::Code;
+	let checkpoint = request.checkpoint.clone().unwrap();
+	let root = request.workspace.clone().unwrap();
+	let (sender, mut events) = mpsc::channel(128);
+	let (cancel, receiver) = watch::channel(false);
+	let observe = async {
+		while let Some(event) = events.recv().await {
+			if let ProviderEvent::Approval(approval) = event {
+				cancel.send(true).unwrap();
+				let _pending_approval = approval;
+				std::future::pending::<()>().await;
+			}
+		}
+	};
+	tokio::pin!(observe);
+	let result = tokio::select! {
+		result = stream_chat(request, sender, receiver) => result,
+		_ = &mut observe => panic!("No approval requested"),
+	};
+	assert_eq!(result.unwrap_err(), "Cancelled.");
+	handle.join().unwrap();
+	assert!(!root.join("pending.txt").exists());
+	let saved = std::fs::read_to_string(&checkpoint).unwrap();
+	assert!(saved.contains("Starting tool 1: write_file"));
+	assert!(saved.contains("Status: in progress"));
+	assert!(!saved.contains("Tool result: write_file"));
+	let journal = state::Journal::open(checkpoint, Some(root), "Resume".into()).await.unwrap();
+	assert!(journal.progress.summary.contains("pending.txt"));
 }
 
 #[tokio::test]
