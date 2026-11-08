@@ -1,4 +1,24 @@
+use std::time::Duration;
+
 use super::*;
+
+#[test]
+fn animation_repaint_delay_is_stable_across_refresh_predictions() {
+    for hz in [60.0, 165.0] {
+        let context = egui::Context::default();
+        let input = egui::RawInput {
+            predicted_dt: 1.0 / hz,
+            ..Default::default()
+        };
+        let _ = context.run(input.clone(), |_| {});
+        let _ = context.run(input.clone(), |_| {});
+        let output = context.run(input, super::super::request_animation_frame);
+        assert_eq!(
+            output.viewport_output[&egui::ViewportId::ROOT].repaint_delay,
+            std::time::Duration::from_secs_f64(1.0 / 60.0)
+        );
+    }
+}
 
 #[test]
 fn saved_cursor_choices_and_colors_survive_restart() {
@@ -74,7 +94,7 @@ fn animation_covers_the_page_from_the_first_frame() {
                 egui::TopBottomPanel::bottom("tall_composer")
                     .exact_height(861.0)
                     .show(context, |_| {});
-                startup.draw(context);
+                startup.draw(context, 42.0);
             },
         );
         let page_index = output.shapes.iter().position(|entry| {
@@ -133,7 +153,9 @@ fn completed_animation_leaves_no_overlay() {
         finished: false,
     };
     let context = egui::Context::default();
-    let output = context.run(egui::RawInput::default(), |context| startup.draw(context));
+    let output = context.run(egui::RawInput::default(), |context| {
+        startup.draw(context, 42.0)
+    });
     assert!(!startup.is_active());
     assert!(output.shapes.is_empty());
 }

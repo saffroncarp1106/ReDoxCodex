@@ -14,7 +14,10 @@ pub enum Update {
     Delegation(crate::delegation::Event),
     Metrics(crate::ollama::Stats),
     Content(String),
-    ReplaceContent { offset: usize, text: String },
+    ReplaceContent {
+        offset: usize,
+        text: String,
+    },
     Complete,
     Cancelled,
     Failed(String),
@@ -121,6 +124,11 @@ impl Running {
                     ProviderEvent::Approval(approval) => Update::Approval(approval),
                 };
 
+                let streamed_text = matches!(
+                    &update,
+                    Update::Content(_)
+                        | Update::Delegation(crate::delegation::Event::Content { .. })
+                );
                 if sender.send(RunEvent { run: id, update }).await.is_err() {
                     activity.stop();
                     let _ = stop.send(true);
@@ -128,7 +136,9 @@ impl Running {
                     return;
                 }
 
-                context.request_repaint();
+                if !streamed_text {
+                    context.request_repaint();
+                }
             }
 
             let result = producer

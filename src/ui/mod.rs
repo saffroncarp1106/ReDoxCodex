@@ -33,6 +33,15 @@ mod window_frame;
 
 pub(super) const PREFERENCES_KEY: &str = "redox.ui.v1";
 
+pub(super) fn request_animation_frame(context: &egui::Context) {
+    use std::time::Duration;
+
+    // egui subtracts its predicted frame time from delayed repaint requests.
+    let predicted = context.input(|input| input.predicted_dt);
+    let frame = Duration::from_secs_f64(1.0 / 60.0);
+    context.request_repaint_after(frame + Duration::from_secs_f32(predicted));
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub(super) struct Preferences {
@@ -96,17 +105,24 @@ impl ReDox {
         }
         theme::update_colors(context, palette);
         let renderer = renderers::resolve(&self.active_ui.config.layout);
-        if renderer.id == win98::ID {
+        let windows_desktop = renderer.id == win98::ID;
+        if windows_desktop {
+            self.win98_title_bar(context);
             self.win98_taskbar(context);
         } else {
             self.title_bar(context);
         }
         self.agents_panel(context);
-        (renderer.rail)(self, context);
+        if !windows_desktop {
+            (renderer.rail)(self, context);
+        }
         if self.sidebar_visible
             && (!self.ui_preferences.agents_open || context.viewport_rect().width() >= 1280.0)
         {
             self.sidebar(context);
+        }
+        if windows_desktop {
+            (renderer.rail)(self, context);
         }
         (renderer.conversation)(self, context);
         self.rename_dialog(context);
@@ -114,7 +130,14 @@ impl ReDox {
         self.approval_dialog(context);
         self.usage_dialog(context);
         self.window_interactions(context);
-        self.startup.draw(context);
+        self.startup.draw(
+            context,
+            if windows_desktop {
+                win98::HEADER_HEIGHT
+            } else {
+                42.0
+            },
+        );
         self.ui_drop_hint(context);
         self.project_windows(context);
         self.capture_frame(context);

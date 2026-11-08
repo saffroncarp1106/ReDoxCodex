@@ -113,6 +113,18 @@ pub fn conversation_scroll() -> egui::style::ScrollStyle {
     }
 }
 
+pub(super) fn slider(ui: &mut egui::Ui, slider: egui::Slider<'_>) -> egui::Response {
+    if ui.visuals().dark_mode {
+        return ui.add(slider);
+    }
+    ui.scope(|ui| {
+        ui.spacing_mut().slider_rail_height = 2.0;
+        ui.visuals_mut().widgets.inactive.bg_fill = egui::Color32::from_gray(155);
+        ui.add(slider)
+    })
+    .inner
+}
+
 pub fn apply(ctx: &egui::Context, layout: &str) {
     let classic = layout == super::win98::ID;
     let mut fonts = egui::FontDefinitions::default();

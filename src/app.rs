@@ -1223,11 +1223,12 @@ impl eframe::App for ReDox {
             }
         }
 
-        if self.running.is_some()
-            || self
-                .login_task
-                .as_ref()
-                .is_some_and(|task| !task.is_finished())
+        if self.running.is_some() {
+            ui::request_animation_frame(context);
+        } else if self
+            .login_task
+            .as_ref()
+            .is_some_and(|task| !task.is_finished())
         {
             context.request_repaint_after(Duration::from_millis(33));
         }

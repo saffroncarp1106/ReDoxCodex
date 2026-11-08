@@ -46,6 +46,9 @@ impl ReDox {
             if std::env::args().any(|arg| arg == "--agents") {
                 self.ui_preferences.agents_open = true;
             }
+            if std::env::args().any(|arg| arg == "--sidebar") {
+                self.sidebar_visible = true;
+            }
             if format_preview {
                 self.session.new_chat();
                 if let Some(chat) = self.session.active_mut() {
@@ -115,6 +118,7 @@ impl ReDox {
                 std::env::args().find_map(|arg| arg.strip_prefix("--settings=").map(str::to_owned))
             {
                 self.settings_open = true;
+                self.ui_preferences.floating_windows = false;
                 self.settings_page = match page.as_str() {
                     "models" => super::SettingsPage::Models,
                     "workspace" => super::SettingsPage::Workspace,

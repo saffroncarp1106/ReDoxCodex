@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use eframe::egui::{self, Color32, FontId, Pos2, Rect, Sense, Shape, Stroke, Vec2, pos2, vec2};
 use serde::{Deserialize, Serialize};
@@ -168,7 +168,7 @@ impl Startup {
         config
     }
 
-    pub fn draw(&mut self, context: &egui::Context) {
+    pub fn draw(&mut self, context: &egui::Context, title_height: f32) {
         if self.finished {
             return;
         }
@@ -195,7 +195,10 @@ impl Startup {
         }
         let screen = context.viewport_rect();
         let body = Rect::from_min_max(
-            pos2(screen.left(), (screen.top() + 42.0).min(screen.bottom())),
+            pos2(
+                screen.left(),
+                (screen.top() + title_height).min(screen.bottom()),
+            ),
             screen.max,
         );
         let scene = Scene::capture(context, body, self.config.cursor_count, self.config.seed);
@@ -212,7 +215,7 @@ impl Startup {
             .show(context, |ui| {
                 ui.allocate_exact_size(body.size(), Sense::click_and_drag());
             });
-        context.request_repaint_after(Duration::from_millis(16));
+        super::request_animation_frame(context);
     }
 
     fn paint(&self, painter: egui::Painter, rect: Rect, elapsed: f32, scene: &Scene) {

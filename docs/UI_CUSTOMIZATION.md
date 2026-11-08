@@ -61,7 +61,7 @@ cargo build --locked
 .\target\debug\redox.exe --screenshot temp\screenshots\appearance.png --settings=appearance
 .\target\debug\redox.exe --screenshot temp\screenshots\advanced.png --settings=advanced
 .\target\debug\redox.exe --screenshot temp\screenshots\usage.png --usage
-.\target\debug\redox.exe --screenshot temp\screenshots\win98-home.png --ui=win98 --home-preview
+.\target\debug\redox.exe --screenshot temp\screenshots\win98-home.png --ui=win98 --home-preview --sidebar
 ```
 
 To capture the startup choreography at a fixed time (in seconds), use:

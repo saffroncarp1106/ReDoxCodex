@@ -3,13 +3,26 @@ use eframe::egui::{self, Align, Color32, Frame, Layout, RichText, vec2};
 use super::controls::model_label;
 use super::icons::{self, Icon};
 use super::theme::{muted, surface};
-use super::{Preferences, SettingsPage, theme};
+use super::{Preferences, SettingsPage, theme, win98};
 use crate::app::ReDox;
 use redox::codex;
 use redox::domain::{DEFAULT_MODEL, Mode};
 
+const SETTINGS_PAGES: [(SettingsPage, &str); 6] = [
+    (SettingsPage::Account, "Account"),
+    (SettingsPage::Models, "Models & reasoning"),
+    (SettingsPage::Workspace, "Workspace & access"),
+    (SettingsPage::Appearance, "Appearance"),
+    (SettingsPage::Cursors, "Cursor animation"),
+    (SettingsPage::Advanced, "Advanced"),
+];
+
 impl ReDox {
     pub(in crate::app) fn settings(&mut self, context: &egui::Context) {
+        if self.active_ui.config.layout == win98::ID {
+            self.win98_settings(context);
+            return;
+        }
         let mut open = self.settings_open;
         let animation_was_active = self.startup.is_active();
         if self.ui_preferences.floating_windows {
@@ -50,14 +63,7 @@ impl ReDox {
 
     fn settings_body(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
         ui.add_space(8.0);
-        let pages = [
-            (SettingsPage::Account, "Account"),
-            (SettingsPage::Models, "Models & reasoning"),
-            (SettingsPage::Workspace, "Workspace & access"),
-            (SettingsPage::Appearance, "Appearance"),
-            (SettingsPage::Cursors, "Cursor animation"),
-            (SettingsPage::Advanced, "Advanced"),
-        ];
+        let pages = SETTINGS_PAGES;
         if ui.available_width() < 620.0 {
             let title = pages
                 .iter()
@@ -100,15 +106,182 @@ impl ReDox {
         }
     }
 
+    fn win98_settings(&mut self, context: &egui::Context) {
+        if !self.settings_open || self.startup.is_active() {
+            return;
+        }
+        let available = context.content_rect().size();
+        let size = vec2(
+            (available.x - 28.0).clamp(320.0, 566.0),
+            (available.y - 42.0).clamp(270.0, 520.0),
+        );
+        if self.ui_preferences.floating_windows {
+            context.show_viewport_immediate(
+                egui::ViewportId::from_hash_of("win98_settings"),
+                Self::app_viewport()
+                    .with_title("ReDox Properties")
+                    .with_decorations(false)
+                    .with_resizable(false)
+                    .with_inner_size(size),
+                |child, class| {
+                    if class == egui::ViewportClass::Embedded {
+                        self.win98_settings_window(child, size);
+                    } else if child.input(|input| input.viewport().close_requested())
+                        || (child.input(|input| input.key_pressed(egui::Key::Escape))
+                            && !egui::Popup::is_any_open(child))
+                    {
+                        self.settings_open = false;
+                    } else {
+                        egui::CentralPanel::default()
+                            .frame(Frame::NONE)
+                            .show(child, |ui| {
+                                self.win98_property_sheet(ui, true);
+                            });
+                    }
+                    if !self.settings_open || child.input(|input| !input.events.is_empty()) {
+                        child.request_repaint_of(egui::ViewportId::ROOT);
+                    }
+                },
+            );
+        } else {
+            self.win98_settings_window(context, size);
+        }
+    }
+
+    fn win98_settings_window(&mut self, context: &egui::Context, size: egui::Vec2) {
+        egui::Window::new("ReDox Properties")
+            .id(egui::Id::new("win98_properties_sheet"))
+            .default_pos(context.content_rect().center() - size * 0.5)
+            .fixed_size(size)
+            .title_bar(false)
+            .frame(Frame::NONE)
+            .show(context, |ui| self.win98_property_sheet(ui, false));
+    }
+
+    fn win98_property_sheet(&mut self, ui: &mut egui::Ui, floating: bool) {
+        let context = ui.ctx().clone();
+        let shell = Frame::NONE
+            .fill(theme::sidebar())
+            .inner_margin(4)
+            .show(ui, |ui| {
+                let (caption, drag) = ui.allocate_exact_size(
+                    vec2(ui.available_width(), 24.0),
+                    if floating {
+                        egui::Sense::drag()
+                    } else {
+                        egui::Sense::hover()
+                    },
+                );
+                win98::caption_background(ui.painter(), caption);
+                ui.painter().text(
+                    caption.left_center() + vec2(6.0, 0.0),
+                    egui::Align2::LEFT_CENTER,
+                    "ReDox Properties",
+                    theme::semibold(14.0),
+                    Color32::WHITE,
+                );
+                if floating && drag.drag_started() {
+                    context.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                }
+                let close_rect = egui::Rect::from_center_size(
+                    caption.right_center() - vec2(12.0, 0.0),
+                    vec2(19.0, 19.0),
+                );
+                let close = ui
+                    .put(
+                        close_rect,
+                        egui::Button::new("×").min_size(vec2(19.0, 19.0)),
+                    )
+                    .on_hover_text("Close Settings");
+                win98::bevel(ui.painter(), close.rect, close.is_pointer_button_down_on());
+                if close.clicked() {
+                    self.settings_open = false;
+                }
+                Frame::NONE.inner_margin(8).show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    let mut selected_tab = None;
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(1.0, 2.0);
+                        for ((page, tooltip), label) in SETTINGS_PAGES.into_iter().zip([
+                            "Account",
+                            "Models",
+                            "Workspace",
+                            "Appearance",
+                            "Cursors",
+                            "Advanced",
+                        ]) {
+                            let selected = self.settings_page == page;
+                            let response = ui
+                                .add(
+                                    egui::Button::new(label)
+                                        .fill(if selected {
+                                            theme::sidebar()
+                                        } else {
+                                            Color32::from_gray(176)
+                                        })
+                                        .min_size(vec2(0.0, 24.0)),
+                                )
+                                .on_hover_text(tooltip);
+                            win98::bevel(ui.painter(), response.rect, false);
+                            if selected {
+                                selected_tab = Some(response.rect);
+                            }
+                            if response.clicked() {
+                                self.settings_page = page;
+                            }
+                        }
+                    });
+                    let pane = Frame::NONE.inner_margin(12).show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.y = 5.0;
+                        self.settings_content(ui, &context);
+                    });
+                    win98::bevel(ui.painter(), pane.response.rect, false);
+                    if let Some(tab) = selected_tab
+                        .filter(|tab| (pane.response.rect.top() - tab.bottom()).abs() <= 1.0)
+                    {
+                        let join = egui::Rect::from_min_max(
+                            tab.left_bottom() + vec2(1.0, -1.0),
+                            tab.right_bottom() + vec2(-1.0, 1.5),
+                        );
+                        ui.painter().rect_filled(join, 0, theme::sidebar());
+                    }
+                    ui.add_space(8.0);
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if win98::button(ui, "OK", vec2(78.0, 25.0)).clicked() {
+                            self.settings_open = false;
+                        }
+                        ui.label(
+                            RichText::new("Changes apply as you make them.")
+                                .small()
+                                .color(muted()),
+                        );
+                    });
+                });
+            });
+        win98::bevel(ui.painter(), shell.response.rect, false);
+    }
+
     fn settings_content(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
-        ui.spacing_mut().scroll = theme::conversation_scroll();
+        let classic = self.active_ui.config.layout == win98::ID;
+        if !classic {
+            ui.spacing_mut().scroll = theme::conversation_scroll();
+        }
         egui::ScrollArea::vertical()
-            .id_salt("settings_content")
-            .max_height((ui.available_height() - 16.0).max(220.0))
+            .id_salt((
+                "settings_content",
+                classic.then_some(self.settings_page as u8),
+            ))
+            .max_height(if classic {
+                (ui.available_height() - 44.0).max(0.0)
+            } else {
+                (ui.available_height() - 16.0).max(220.0)
+            })
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.vertical(|ui| {
-                    ui.set_min_width((ui.available_width() - 8.0).max(260.0));
+                    if !classic {
+                        ui.set_min_width((ui.available_width() - 8.0).max(260.0));
+                    }
                     ui.add_space(4.0);
                     match self.settings_page {
                         SettingsPage::Account => self.account_settings(ui, context),
@@ -270,94 +443,97 @@ impl ReDox {
             "Workspace & access",
             "Choose a project and what the current chat can do.",
         );
-        ui.label(RichText::new("Project folder").font(theme::semibold(14.0)));
-        if let Some(path) = self
-            .session
-            .active()
-            .and_then(|chat| chat.workspace.as_ref())
-        {
-            ui.add(
-                egui::Label::new(RichText::new(path.display().to_string()).monospace())
-                    .wrap()
-                    .selectable(true),
-            );
-        } else {
-            ui.label(RichText::new("No project folder for this chat").color(muted()));
-        }
-        if ui
-            .add_enabled(
-                !self.picking_workspace,
-                egui::Button::new("Choose project folder"),
-            )
-            .clicked()
-        {
-            self.pick_workspace(context);
-        }
-        ui.label(
-            RichText::new("Opening a project creates or selects a chat for that folder. If this chat's folder is missing, it reconnects this chat and keeps your draft.")
-                .small()
-                .color(muted()),
-        );
-        let selected = self.session.workspace.clone();
-        if self
-            .session
-            .active()
-            .is_some_and(|chat| chat.workspace != selected)
-            && selected.as_ref().is_some_and(|path| path.is_dir())
-            && ui
+        settings_group(ui, "Project folder", |ui| {
+            if let Some(path) = self
+                .session
+                .active()
+                .and_then(|chat| chat.workspace.as_ref())
+            {
+                ui.add(
+                    egui::Label::new(RichText::new(path.display().to_string()).monospace())
+                        .wrap()
+                        .selectable(true),
+                );
+            } else {
+                ui.label(RichText::new("No project folder for this chat").color(muted()));
+            }
+            if ui
                 .add_enabled(
-                    self.running.is_none(),
-                    egui::Button::new("Use selected project for this chat"),
+                    !self.picking_workspace,
+                    egui::Button::new("Choose project folder"),
                 )
                 .clicked()
-            && let Some(chat) = self.session.active_mut()
-        {
-            chat.set_workspace(selected);
-        }
-        if let Some(path) = self
-            .session
-            .active()
-            .and_then(|chat| chat.workspace.as_ref())
-            && !path.is_dir()
-        {
-            ui.colored_label(Color32::LIGHT_RED, "This chat's project folder no longer exists. Select a valid project and use it for this chat.");
-        }
-        ui.add_space(20.0);
-        ui.label(RichText::new("ReDox Remote control").font(theme::semibold(14.0)));
-        ui.add_enabled_ui(redox::desktop::SUPPORTED && self.running.is_none(), |ui| {
-            ui.checkbox(
-                &mut self.session.desktop.enabled,
-                "Allow the selected agent to see and control this desktop",
+            {
+                self.pick_workspace(context);
+            }
+            ui.label(
+                RichText::new("Opening a project creates or selects a chat for that folder. If this chat's folder is missing, it reconnects this chat and keeps your draft.")
+                    .small()
+                    .color(muted()),
             );
-            ui.add_enabled_ui(self.session.desktop.enabled, |ui| {
-                ui.checkbox(
-                    &mut self.session.desktop.confirm_actions,
-                    "Ask before mouse and keyboard input outside Full access",
-                );
-            });
+            let selected = self.session.workspace.clone();
+            if self
+                .session
+                .active()
+                .is_some_and(|chat| chat.workspace != selected)
+                && selected.as_ref().is_some_and(|path| path.is_dir())
+                && ui
+                    .add_enabled(
+                        self.running.is_none(),
+                        egui::Button::new("Use selected project for this chat"),
+                    )
+                    .clicked()
+                && let Some(chat) = self.session.active_mut()
+            {
+                chat.set_workspace(selected);
+            }
+            if let Some(path) = self
+                .session
+                .active()
+                .and_then(|chat| chat.workspace.as_ref())
+                && !path.is_dir()
+            {
+                ui.colored_label(Color32::LIGHT_RED, "This chat's project folder no longer exists. Select a valid project and use it for this chat.");
+            }
         });
-        ui.label(RichText::new(if redox::desktop::SUPPORTED {
-            "ReDox lets Codex and Ollama capture screens, focus windows, and use the mouse and keyboard. Full access skips the remote input prompt when Remote control is enabled. Ollama requires vision and tool calling. Screenshots go to the selected provider. Use Stop or hold Escape to stop remote input. Changes apply on the next response."
-        } else {
-            "ReDox Remote control currently supports Windows."
-        }).small().color(muted()));
         ui.add_space(20.0);
-        ui.label(RichText::new("Current chat permissions").font(theme::semibold(14.0)));
-        if let Some(chat) = self.session.active_mut() {
-            let mut mode = chat.mode;
-            ui.add_enabled_ui(self.running.is_none(), |ui| {
-                for (option, detail) in [
-                    (Mode::Chat, "Read files and run read-only commands."),
-                    (Mode::Code, "Read and edit project files; review commands when Codex requests approval."),
-                    (Mode::FullAccess, "Unrestricted filesystem and commands, without approval prompts."),
-                ] {
-                    ui.radio_value(&mut mode, option, option.label());
-                    ui.label(RichText::new(detail).small().color(muted()));
-                    ui.add_space(5.0);
-                }
+        settings_group(ui, "ReDox Remote control", |ui| {
+            ui.add_enabled_ui(redox::desktop::SUPPORTED && self.running.is_none(), |ui| {
+                ui.checkbox(
+                    &mut self.session.desktop.enabled,
+                    "Allow the selected agent to see and control this desktop",
+                );
+                ui.add_enabled_ui(self.session.desktop.enabled, |ui| {
+                    ui.checkbox(
+                        &mut self.session.desktop.confirm_actions,
+                        "Ask before mouse and keyboard input outside Full access",
+                    );
+                });
             });
-            chat.set_mode(mode);
-        }
+            ui.label(RichText::new(if redox::desktop::SUPPORTED {
+                "ReDox lets Codex and Ollama capture screens, focus windows, and use the mouse and keyboard. Full access skips the remote input prompt when Remote control is enabled. Ollama requires vision and tool calling. Screenshots go to the selected provider. Use Stop or hold Escape to stop remote input. Changes apply on the next response."
+            } else {
+                "ReDox Remote control currently supports Windows."
+            }).small().color(muted()));
+        });
+        ui.add_space(20.0);
+        settings_group(ui, "Current chat permissions", |ui| {
+            if let Some(chat) = self.session.active_mut() {
+                let mut mode = chat.mode;
+                ui.add_enabled_ui(self.running.is_none(), |ui| {
+                    for (option, detail) in [
+                        (Mode::Chat, "Read files and run read-only commands."),
+                        (Mode::Code, "Read and edit project files; review commands when Codex requests approval."),
+                        (Mode::FullAccess, "Unrestricted filesystem and commands, without approval prompts."),
+                    ] {
+                        ui.radio_value(&mut mode, option, option.label());
+                        ui.label(RichText::new(detail).small().color(muted()));
+                        ui.add_space(5.0);
+                    }
+                });
+                chat.set_mode(mode);
+            }
+        });
         ui.add_space(12.0);
         ui.label(RichText::new("Attachments").font(theme::semibold(14.0)));
         ui.label(RichText::new("Use + → Add files in the composer. Up to 8 files per message; 128 KiB per text file and 20 MiB per image.").color(muted()));
@@ -434,13 +610,16 @@ impl ReDox {
         let changed = ui
             .scope(|ui| {
                 ui.spacing_mut().slider_width = 190.0;
-                let visuals = &mut ui.style_mut().visuals;
-                visuals.widgets.inactive.bg_fill = theme::blue();
-                visuals.widgets.inactive.weak_bg_fill = Color32::from_gray(75);
-                visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0_f32, theme::blue());
-                visuals.widgets.hovered.bg_fill = theme::blue();
-                visuals.widgets.active.bg_fill = theme::blue();
-                ui.add(
+                if ui.visuals().dark_mode {
+                    let visuals = &mut ui.style_mut().visuals;
+                    visuals.widgets.inactive.bg_fill = theme::blue();
+                    visuals.widgets.inactive.weak_bg_fill = Color32::from_gray(75);
+                    visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0_f32, theme::blue());
+                    visuals.widgets.hovered.bg_fill = theme::blue();
+                    visuals.widgets.active.bg_fill = theme::blue();
+                }
+                theme::slider(
+                    ui,
                     egui::Slider::new(&mut percent, 80.0..=150.0)
                         .suffix("%")
                         .step_by(5.0),
@@ -525,6 +704,12 @@ impl ReDox {
 }
 
 fn heading(ui: &mut egui::Ui, title: &str, description: &str) {
+    if !ui.visuals().dark_mode {
+        ui.label(RichText::new(title).font(theme::semibold(15.0)));
+        ui.label(description);
+        ui.add_space(8.0);
+        return;
+    }
     ui.horizontal(|ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(21.0, 26.0), egui::Sense::hover());
         icons::paint(
@@ -537,4 +722,13 @@ fn heading(ui: &mut egui::Ui, title: &str, description: &str) {
     });
     ui.label(RichText::new(description).color(muted()));
     ui.add_space(22.0);
+}
+
+fn settings_group(ui: &mut egui::Ui, title: &str, contents: impl FnOnce(&mut egui::Ui)) {
+    if ui.visuals().dark_mode {
+        ui.label(RichText::new(title).font(theme::semibold(14.0)));
+        contents(ui);
+    } else {
+        win98::group_box(ui, title, contents);
+    }
 }

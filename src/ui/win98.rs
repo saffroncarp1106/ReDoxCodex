@@ -7,7 +7,8 @@ use super::{conversation::render_transcript, theme, window_frame};
 use crate::app::ReDox;
 
 pub(super) const ID: &str = "win98";
-const NAVY: Color32 = Color32::from_rgb(0, 0, 128);
+pub(super) const HEADER_HEIGHT: f32 = 57.0;
+pub(super) const NAVY: Color32 = Color32::from_rgb(0, 0, 128);
 const SILVER: Color32 = Color32::from_gray(192);
 const WHITE: Color32 = Color32::WHITE;
 const BLACK: Color32 = Color32::BLACK;
@@ -172,6 +173,51 @@ pub(super) fn button(
     response
 }
 
+pub(super) fn list_box(ui: &mut Ui, contents: impl FnOnce(&mut Ui)) {
+    let frame = Frame::NONE.fill(WHITE).inner_margin(3).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        contents(ui);
+    });
+    bevel(ui.painter(), frame.response.rect, true);
+}
+
+pub(super) fn group_box(ui: &mut Ui, label: &str, contents: impl FnOnce(&mut Ui)) {
+    let frame = Frame::NONE
+        .inner_margin(Margin {
+            top: 13,
+            ..Margin::same(10)
+        })
+        .outer_margin(Margin {
+            top: 7,
+            ..Margin::ZERO
+        })
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            contents(ui);
+        });
+    let mut rect = frame.response.rect;
+    rect.min.y += 7.0;
+    let painter = ui.painter();
+    bevel(painter, rect, true);
+    let galley = painter.layout_no_wrap(
+        label.into(),
+        egui::FontId::proportional(13.0),
+        theme::text(),
+    );
+    let position = pos2(rect.left() + 10.0, rect.top() - galley.size().y / 2.0);
+    painter.rect_filled(
+        Rect::from_min_size(position, galley.size()).expand2(vec2(4.0, 0.0)),
+        0,
+        theme::sidebar(),
+    );
+    painter.galley(position, galley, theme::text());
+}
+
+pub(super) fn caption_background(painter: &egui::Painter, rect: Rect) {
+    let blue = Color32::from_rgb(24, 109, 186);
+    gradient(painter, rect, [NAVY, blue, blue, NAVY]);
+}
+
 fn mark(painter: &egui::Painter, rect: Rect) {
     let colors = [
         Color32::from_rgb(238, 69, 38),
@@ -246,6 +292,22 @@ fn welcome_monitor(painter: &egui::Painter, bounds: Rect) {
 }
 
 impl ReDox {
+    pub(super) fn win98_title_bar(&mut self, context: &egui::Context) {
+        egui::TopBottomPanel::top("win98_window_chrome")
+            .exact_height(HEADER_HEIGHT)
+            .show_separator_line(false)
+            .frame(Frame::NONE.fill(theme::rail()))
+            .show(context, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                self.win98_caption(ui, context, true);
+                Frame::NONE
+                    .inner_margin(Margin::symmetric(4, 0))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| self.main_menus(ui, context));
+                    });
+            });
+    }
+
     pub(super) fn win98_taskbar(&mut self, context: &egui::Context) {
         egui::TopBottomPanel::bottom("win98_taskbar")
             .exact_height(34.0)
@@ -373,10 +435,11 @@ impl ReDox {
     pub(super) fn win98_conversation(&mut self, context: &egui::Context) {
         let root = context.viewport_id() == egui::ViewportId::ROOT;
         let gutter = if root {
-            Margin::symmetric(
-                18,
-                (context.content_rect().height() * 0.065).clamp(10.0, 52.0) as i8,
-            )
+            Margin {
+                top: 10,
+                bottom: (context.content_rect().height() * 0.065).clamp(10.0, 52.0) as i8,
+                ..Margin::symmetric(18, 0)
+            }
         } else {
             Margin::same(4)
         };
@@ -403,15 +466,13 @@ impl ReDox {
                 let inner = rect.shrink(4.0);
                 let mut window = ui.new_child(egui::UiBuilder::new().max_rect(inner));
                 window.set_clip_rect(ui.clip_rect().intersect(inner));
-                egui::TopBottomPanel::top("win98_header")
-                    .show_separator_line(false)
-                    .frame(Frame::NONE)
-                    .show_inside(&mut window, |ui| {
-                        self.win98_caption(ui, context, root);
-                        if root {
-                            ui.horizontal(|ui| self.main_menus(ui, context));
-                        }
-                    });
+                if !root {
+                    egui::TopBottomPanel::top("win98_branch_header")
+                        .exact_height(27.0)
+                        .show_separator_line(false)
+                        .frame(Frame::NONE)
+                        .show_inside(&mut window, |ui| self.win98_caption(ui, context, false));
+                }
                 self.composer(context, Some(&mut window));
                 egui::CentralPanel::default()
                     .frame(Frame::NONE.fill(WHITE))
@@ -440,8 +501,7 @@ impl ReDox {
         let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 27.0), Sense::hover());
         let control_width = if root { 77.0 } else { 0.0 };
         let caption = Rect::from_min_max(rect.min, rect.right_bottom() - vec2(control_width, 0.0));
-        let blue = Color32::from_rgb(24, 109, 186);
-        gradient(ui.painter(), rect, [NAVY, blue, blue, NAVY]);
+        caption_background(ui.painter(), rect);
         mark(
             ui.painter(),
             Rect::from_center_size(rect.left_center() + vec2(14.0, 0.0), vec2(15.0, 13.0)),

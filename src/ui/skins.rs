@@ -300,7 +300,8 @@ impl ReDox {
         });
         if let Some(path) = &editor.image {
             ui.label(path.file_name().unwrap_or_default().to_string_lossy());
-            ui.add(
+            super::theme::slider(
+                ui,
                 egui::Slider::new(&mut editor.config.background_opacity, 0.0..=1.0)
                     .text("Picture opacity"),
             );

@@ -66,6 +66,7 @@ pub(super) fn show_text(
                 .retain(|_, appearance| appearance.frame >= frame.saturating_sub(1));
         });
     }
+    let mut animating = false;
     for (index, clip, mut text) in shapes {
         let label = text.galley.text();
         let mut motion = Vec::new();
@@ -98,7 +99,6 @@ pub(super) fn show_text(
                     let angle =
                         14.0_f32.to_radians() * (progress * std::f32::consts::TAU * 3.0).sin();
                     motion.push((bytes, angle));
-                    context.request_repaint_after(Duration::from_millis(16));
                 }
             }
         }
@@ -119,6 +119,7 @@ pub(super) fn show_text(
             }
         }
         if !motion.is_empty() {
+            animating = true;
             for (bytes, angle) in motion {
                 rotate_glyphs(&mut text, bytes, angle);
             }
@@ -130,6 +131,9 @@ pub(super) fn show_text(
                 }
             });
         }
+    }
+    if animating {
+        super::request_animation_frame(&context);
     }
 }
 

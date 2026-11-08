@@ -35,9 +35,18 @@ impl Glow {
             ui.color_edit_button_srgb(&mut self.color);
             ui.label("Glow color");
         });
-        ui.add(egui::Slider::new(&mut self.strength, 0.1..=1.0).text("Intensity"));
-        ui.add(egui::Slider::new(&mut self.radius, 2.0..=14.0).text("Aura size"));
-        ui.add(egui::Slider::new(&mut self.speed, 0.2..=3.0).text("Pulse speed"));
+        super::theme::slider(
+            ui,
+            egui::Slider::new(&mut self.strength, 0.1..=1.0).text("Intensity"),
+        );
+        super::theme::slider(
+            ui,
+            egui::Slider::new(&mut self.radius, 2.0..=14.0).text("Aura size"),
+        );
+        super::theme::slider(
+            ui,
+            egui::Slider::new(&mut self.speed, 0.2..=3.0).text("Pulse speed"),
+        );
         ui.label("Drag a project folder row out to open a chat branch in a separate window.");
     }
 }
