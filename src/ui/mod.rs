@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::ReDox;
 
+mod about;
 mod activity;
 mod agents;
 mod capture;
@@ -32,6 +33,7 @@ mod win98;
 mod window_frame;
 
 pub(super) const PREFERENCES_KEY: &str = "redox.ui.v1";
+pub(super) use about::About;
 
 pub(super) fn request_animation_frame(context: &egui::Context) {
     use std::time::Duration;
@@ -56,6 +58,7 @@ pub(super) struct Preferences {
     pub agents_open: bool,
     pub agent_task: String,
     pub floating_windows: bool,
+    pub win98_unlocked: bool,
 }
 
 impl Default for Preferences {
@@ -72,17 +75,23 @@ impl Default for Preferences {
             agents_open: false,
             agent_task: String::new(),
             floating_windows: true,
+            win98_unlocked: false,
         }
     }
 }
 
 impl Preferences {
     pub fn normalize(&mut self) {
+        self.win98_unlocked |= self.ui == win98::ID || self.sidebars.contains_key(win98::ID);
         self.zoom = if self.zoom.is_finite() {
             self.zoom.clamp(0.8, 1.5)
         } else {
             1.0
         };
+    }
+
+    pub fn shows_ui(&self, id: &str) -> bool {
+        id != win98::ID || self.win98_unlocked
     }
 }
 
@@ -95,6 +104,7 @@ pub(super) enum SettingsPage {
     Appearance,
     Cursors,
     Advanced,
+    About,
 }
 
 impl ReDox {

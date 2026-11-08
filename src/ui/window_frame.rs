@@ -57,8 +57,12 @@ pub(super) fn title_drag(context: &egui::Context, response: &egui::Response) {
 
 impl ReDox {
     pub(crate) fn app_viewport() -> egui::ViewportBuilder {
+        egui::ViewportBuilder::default().with_icon(Arc::clone(Self::app_icon()))
+    }
+
+    pub(super) fn app_icon() -> &'static Arc<egui::IconData> {
         static ICON: OnceLock<Arc<egui::IconData>> = OnceLock::new();
-        let icon = ICON.get_or_init(|| {
+        ICON.get_or_init(|| {
             let image = image::load_from_memory_with_format(
                 include_bytes!("../../icon.ico"),
                 image::ImageFormat::Ico,
@@ -71,8 +75,7 @@ impl ReDox {
                 width,
                 height,
             })
-        });
-        egui::ViewportBuilder::default().with_icon(Arc::clone(icon))
+        })
     }
 
     pub(crate) fn validate_window_size(

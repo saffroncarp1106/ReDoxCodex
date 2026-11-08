@@ -8,13 +8,14 @@ use crate::app::ReDox;
 use redox::codex;
 use redox::domain::{DEFAULT_MODEL, Mode};
 
-const SETTINGS_PAGES: [(SettingsPage, &str); 6] = [
+const SETTINGS_PAGES: [(SettingsPage, &str); 7] = [
     (SettingsPage::Account, "Account"),
     (SettingsPage::Models, "Models & reasoning"),
     (SettingsPage::Workspace, "Workspace & access"),
     (SettingsPage::Appearance, "Appearance"),
     (SettingsPage::Cursors, "Cursor animation"),
     (SettingsPage::Advanced, "Advanced"),
+    (SettingsPage::About, "About"),
 ];
 
 impl ReDox {
@@ -209,6 +210,7 @@ impl ReDox {
                             "Appearance",
                             "Cursors",
                             "Advanced",
+                            "About",
                         ]) {
                             let selected = self.settings_page == page;
                             let response = ui
@@ -299,6 +301,7 @@ impl ReDox {
                             }
                         }
                         SettingsPage::Advanced => self.advanced_settings(ui, context),
+                        SettingsPage::About => self.about_settings(ui),
                     }
                 });
             });

@@ -125,8 +125,10 @@ impl ReDox {
                     "appearance" => super::SettingsPage::Appearance,
                     "cursors" => super::SettingsPage::Cursors,
                     "advanced" => super::SettingsPage::Advanced,
+                    "about" | "new-ui" => super::SettingsPage::About,
                     _ => super::SettingsPage::Account,
                 };
+                self.about.show_notice = page == "new-ui";
             }
             if std::env::args().any(|arg| arg == "--skin-preview") {
                 self.ui_preferences.floating_windows = false;

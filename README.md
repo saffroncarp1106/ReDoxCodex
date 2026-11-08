@@ -8,7 +8,7 @@ On Windows, open `Launch ReDox.cmd` to build and start the app. Rust and the Vis
 
 On macOS or Linux, with Rust and the native platform build dependencies installed, run `cargo run --locked --bin redox`.
 
-Choose **Windows 98** from the **UI** menu for the teal desktop, classic chat window, and Start taskbar. **My Chats**, **Open Project**, and **Ollama Agents** open their corresponding ReDox tools.
+After you discover **Windows 98**, choose it from the **UI** menu for the teal desktop, classic chat window, and Start taskbar. **My Chats**, **Open Project**, and **Ollama Agents** open their corresponding ReDox tools.
 
 Startup restores the saved window size. Saved sizes below the 900 × 600 minimum recover to 1100 × 900 before the window opens.
 

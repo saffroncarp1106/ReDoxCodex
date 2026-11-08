@@ -85,6 +85,7 @@ pub struct ReDox {
     picking_files: bool,
     attachment_error: Option<String>,
     settings_open: bool,
+    about: ui::About,
     show_archived: bool,
     status: String,
     runtime: Option<tokio::runtime::Runtime>,
@@ -240,6 +241,7 @@ impl ReDox {
             picking_files: false,
             attachment_error: None,
             settings_open: false,
+            about: ui::About::default(),
             show_archived: false,
             status,
             runtime: runtime.ok(),
@@ -1213,6 +1215,7 @@ impl eframe::App for ReDox {
 
         if context.input(|input| input.key_pressed(egui::Key::Escape))
             && !egui::Popup::is_any_open(context)
+            && context.memory(|memory| memory.top_modal_layer().is_none())
         {
             if self.settings_open {
                 self.settings_open = false;

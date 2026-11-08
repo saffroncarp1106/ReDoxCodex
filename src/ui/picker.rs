@@ -29,6 +29,7 @@ impl ReDox {
             .ui_catalog
             .packs
             .iter()
+            .filter(|pack| pack.id == current || self.ui_preferences.shows_ui(&pack.id))
             .map(|pack| (pack.id.clone(), pack.config.name.clone()))
             .collect();
         let enabled = self.running.is_none()
