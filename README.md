@@ -4,17 +4,17 @@ A front-end rewrite for rust because 1.2g of ram for a basic ui window is ridicu
 Redox: A reaction where both reduction and oxidation occurs. The process of Oxidation, is the lose of an electron, the project was aimed to rewrite Codex to no longer use Electron and instead Rust, ironically when Iron oxidizes, it Rusts. Technically a redox reaction needs a reduction, which we have by reducing ram consumption by 10x, so use the free memory for an Ollama model!
 
 ## Run
-Run the application after building using the command below, and open `ReDoxCodex\target\debug\codex-rust.exe`
+On Windows, open `Launch ReDox.cmd` to build and start the app. Rust and the Visual Studio C++ build tools are required.
 
-When making edits `Launch Codex Rust.cmd` to build and open this copy. Rust and the Visual Studio C++ build tools are required.
+On macOS or Linux, with Rust and the native platform build dependencies installed, run `cargo run --locked --bin redox`.
 
-On macOS or Linux, with Rust and the native platform build dependencies installed, build and run with `cargo run --locked --bin codex-rust`. The `.cmd` launcher is for Windows.
+Choose **Windows 98** from the **UI** menu for the teal desktop, classic chat window, and Start taskbar. **My Chats**, **Open Project**, and **Ollama Agents** open their corresponding ReDox tools.
 
 Startup restores the saved window size. Saved sizes below the 900 × 600 minimum recover to 1100 × 900 before the window opens.
 
 Chat rows have a small **×** button to archive locally. Open **Archived chats** and use **↶** to restore them. These choices persist across restarts and history refreshes without changing the server's archive state. Chats generating a response must finish or stop before archiving.
 
-**New chat** reuses an empty conversation for the same project and provider, and is disabled while that blank chat is selected. Creating or returning to a blank chat focuses the message box in both layouts. Drafts and attachments are preserved when starting another chat.
+**New chat** reuses an empty conversation for the same project and provider, and is disabled while that blank chat is selected. Creating or returning to a blank chat focuses the message box in every layout. Drafts and attachments are preserved when starting another chat.
 
 ## Desktop control (Windows)
 
@@ -41,7 +41,9 @@ Ollama responses stream directly into the normal conversation in either layout. 
 
 With **Allow project tools** enabled, models advertising tool support can list/read project files, create directories, write files, and run commands. Choose a project folder and the existing access mode. Read-only mode exposes only file inspection. Workspace mode confines file tools to the project and asks for approval before changes or commands. Full access permits external file paths and skips approvals. Shell commands run with your OS account permissions, without an OS sandbox; they are limited to 30 seconds and bounded output. Replaced files are preserved in the platform's local application-data folder under `ReDox/agent-backups`. Models without tool support still work as chat models. Image attachments require a model advertising vision support.
 
-Local agents have no fixed model-step or per-reply tool-call count limit. They continue tool work until the model answers, an actual error occurs, or you press **Stop**. A response cut short by the output token limit continues automatically; tool calls from that incomplete response are not executed. The selected context window (including 32k) is reused by summarizing progress and starting a fresh message window before the growing transcript fills it. Generation reserves at least three quarters of the context for input and overhead, so the effective response token allowance can be lower than the configured output maximum. Oversized individual tasks, instructions or images must still fit the selected window.
+Local agents have no fixed model-step or per-reply tool-call count limit. ReDox retries a failed Ollama request up to three times after connection drops, timeouts, temporary server errors, or incomplete responses. Each retry resumes at the failed model step using the tool results already recorded. The transcript keeps partial text until a retry replaces it, and **Stop** cancels pending retries. Persistent failures end the turn with the error. A response cut short by the output token limit continues automatically. Tool calls from incomplete responses are discarded.
+
+ReDox reuses the selected context window (including 32k) by summarizing progress and starting a fresh message window before the growing transcript fills it. If summarization still fails after retries, ReDox continues with an excerpt from the saved checkpoint. Generation reserves at least three quarters of the context for input and overhead, so the effective response token allowance can be lower than the configured output maximum. Oversized individual tasks, instructions or images must still fit the selected window.
 
 Each local chat keeps a `steps.md` checkpoint at `%LOCALAPPDATA%\ReDox\agent-state\<chat-id>\steps.md` on Windows, or the platform's local application-data folder under `ReDox/agent-state` elsewhere. It records the task, assistant progress, requested tools, actual results, completion status, and a model-written summary with remaining work at context rollover. The application saves before actions and after results, and loads that chat's checkpoint on the next request, including after restart. To resume interrupted work, reopen the same local chat and send **Continue**; the agent is told to inspect any action without a recorded result before repeating it. Different chats and delegated tasks have separate checkpoints; delegated tasks continue within their current invocation, and a new delegation starts a new checkpoint. Checkpoints are application state, so read-only project access remains read-only and a project's own `steps.md` is untouched. The existing desktop-action cap and project approval rules still apply. Checkpoint summarization adds local model requests and appears in usage counts.
 

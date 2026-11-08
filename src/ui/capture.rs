@@ -37,10 +37,16 @@ impl ReDox {
         };
         self.capture_frames += 1;
         if self.capture_frames == 1 {
+            let home_preview = std::env::args().any(|arg| arg == "--home-preview");
+            let format_preview = std::env::args().any(|arg| arg == "--format-preview");
+            if home_preview || format_preview {
+                self.sidebar_visible = self.active_ui.config.sidebar_default;
+                self.ui_preferences.agents_open = false;
+            }
             if std::env::args().any(|arg| arg == "--agents") {
                 self.ui_preferences.agents_open = true;
             }
-            if std::env::args().any(|arg| arg == "--format-preview") {
+            if format_preview {
                 self.session.new_chat();
                 if let Some(chat) = self.session.active_mut() {
                     chat.title = "Equation and code formatting".into();
@@ -98,7 +104,7 @@ impl ReDox {
                     }
                 }
             }
-            if std::env::args().any(|arg| arg == "--home-preview") {
+            if home_preview {
                 self.session.new_chat();
             }
             context.send_viewport_cmd(egui::ViewportCommand::Maximized(false));

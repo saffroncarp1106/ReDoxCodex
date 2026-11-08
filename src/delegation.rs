@@ -34,6 +34,7 @@ pub struct Task {
 pub enum Event {
     Started(Task),
     Content { id: String, text: String },
+    ReplaceContent { id: String, offset: usize, text: String },
     Progress { id: String, text: String },
     Finished { id: String, error: Option<String> },
 }
@@ -60,6 +61,16 @@ pub fn apply(tasks: &mut Vec<Task>, event: Event) {
                 .iter_mut()
                 .find(|task| task.id == id && task.status == Status::Running)
             {
+                append_bounded(&mut task.output, &text);
+            }
+        }
+        Event::ReplaceContent { id, offset, text } => {
+            if let Some(task) = tasks
+                .iter_mut()
+                .find(|task| task.id == id && task.status == Status::Running)
+                && task.output.is_char_boundary(offset)
+            {
+                task.output.truncate(offset);
                 append_bounded(&mut task.output, &text);
             }
         }
@@ -158,6 +169,15 @@ pub async fn execute(
                         let before = output.len();
                         append_bounded(&mut output, &text);
                         if output.len() > before { send(&sender, Event::Content { id: id.clone(), text: output[before..].into() }).await?; }
+                    }
+                    ProviderEvent::ReplaceContent { offset, text } => {
+                        if output.is_char_boundary(offset) {
+                            output.truncate(offset);
+                            append_bounded(&mut output, &text);
+                            send(&sender, Event::ReplaceContent {
+                                id: id.clone(), offset, text: output[offset..].into()
+                            }).await?;
+                        }
                     }
                     ProviderEvent::Status(text) => send(&sender, Event::Progress { id: id.clone(), text }).await?,
                     ProviderEvent::Metrics(stats) => sender.send(ProviderEvent::Metrics(stats)).await.map_err(|_| "Chat closed.")?,

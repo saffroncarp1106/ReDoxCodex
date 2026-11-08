@@ -9,6 +9,7 @@ The entire presentation layer is in `src/ui/`. Codex transport, authentication, 
 | `packs.rs`, `layouts/` | Pack discovery, config validation, asset import, and built-in configs |
 | `picker.rs` | UI dropdown and drop target |
 | `gemini.rs` | Gemini-style home, rail, composer, and conversation layout |
+| `win98.rs` | Windows 98 desktop, Start taskbar, Welcome window, and classic widgets |
 | `shell.rs` | Window chrome, navigation rail, projects, local chats, shared Codex history and pagination controls |
 | `conversation.rs` | Conversation layout, messages, Markdown/code blocks, composer, attachment chips |
 | `markdown.rs`, `media.rs` | Shared Markdown/math, inline images and animated GIFs, video playback links |
@@ -60,6 +61,7 @@ cargo build --locked
 .\target\debug\redox.exe --screenshot temp\screenshots\appearance.png --settings=appearance
 .\target\debug\redox.exe --screenshot temp\screenshots\advanced.png --settings=advanced
 .\target\debug\redox.exe --screenshot temp\screenshots\usage.png --usage
+.\target\debug\redox.exe --screenshot temp\screenshots\win98-home.png --ui=win98 --home-preview
 ```
 
 To capture the startup choreography at a fixed time (in seconds), use:

@@ -1,0 +1,19 @@
+{
+  "name": "Windows 98",
+  "layout": "win98",
+  "heading": "Welcome to ReDox",
+  "placeholder": "Type a message here...",
+  "sidebar_default": false,
+  "palette": {
+    "background": "#007F82",
+    "sidebar": "#C0C0C0",
+    "rail": "#C0C0C0",
+    "surface": "#DFDFDF",
+    "input_background": "#FFFFFF",
+    "text": "#141414",
+    "menu_text": "#141414",
+    "muted": "#484848",
+    "border": "#808080",
+    "accent": "#000080"
+  }
+}

@@ -28,6 +28,7 @@ pub(super) mod skins;
 pub(super) mod startup;
 pub(super) mod theme;
 mod usage;
+mod win98;
 mod window_frame;
 
 pub(super) const PREFERENCES_KEY: &str = "redox.ui.v1";
@@ -94,9 +95,13 @@ impl ReDox {
             palette = colors.apply(palette);
         }
         theme::update_colors(context, palette);
-        self.title_bar(context);
-        self.agents_panel(context);
         let renderer = renderers::resolve(&self.active_ui.config.layout);
+        if renderer.id == win98::ID {
+            self.win98_taskbar(context);
+        } else {
+            self.title_bar(context);
+        }
+        self.agents_panel(context);
         (renderer.rail)(self, context);
         if self.sidebar_visible
             && (!self.ui_preferences.agents_open || context.viewport_rect().width() >= 1280.0)

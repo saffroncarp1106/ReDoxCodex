@@ -10,6 +10,7 @@ fn registered_layouts_use_their_own_callbacks() {
         ),
         ("gemini", ReDox::gemini_rail, ReDox::gemini_conversation),
         ("claude", ReDox::claude_rail, ReDox::claude_conversation),
+        ("win98", ReDox::win98_desktop, ReDox::win98_conversation),
     ] {
         let renderer = resolve(id);
         assert_eq!(renderer.id, id);

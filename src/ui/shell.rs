@@ -30,97 +30,7 @@ impl ReDox {
                         self.sidebar_visible = !self.sidebar_visible;
                     }
                     ui.add_space(14.0);
-                    ui.allocate_ui_with_layout(
-                        vec2(184.0, 30.0),
-                        Layout::left_to_right(Align::Center),
-                        |ui| {
-                            egui::MenuBar::new().ui(ui, |ui| {
-                                ui.spacing_mut().item_spacing.x = 10.0;
-                                ui.menu_button(
-                                    RichText::new("File").color(theme::menu_text()),
-                                    |ui| {
-                                        if ui
-                                            .add_enabled(
-                                                self.can_new_chat(),
-                                                egui::Button::new(if cfg!(target_os = "macos") {
-                                                    "New chat     ⌘N"
-                                                } else {
-                                                    "New chat     Ctrl+N"
-                                                }),
-                                            )
-                                            .clicked()
-                                        {
-                                            self.new_chat();
-                                            ui.close();
-                                        }
-                                        if ui.button("Open project").clicked() {
-                                            self.pick_workspace(context);
-                                            ui.close();
-                                        }
-                                        if ui.button("Add files").clicked() {
-                                            self.pick_files(context);
-                                            ui.close();
-                                        }
-                                        if ui.button("Settings").clicked() {
-                                            self.settings_open = true;
-                                            ui.close();
-                                        }
-                                        ui.separator();
-                                        if ui.button("Exit").clicked() {
-                                            context.send_viewport_cmd(egui::ViewportCommand::Close);
-                                        }
-                                    },
-                                );
-                                ui.menu_button(
-                                    RichText::new("Edit").color(theme::menu_text()),
-                                    |ui| {
-                                        if ui.button("Rename chat").clicked() {
-                                            self.rename_open = true;
-                                            ui.close();
-                                        }
-                                        if ui.button("Copy conversation").clicked() {
-                                            if let Some(chat) = self.session.active() {
-                                                let text = chat
-                                                    .messages
-                                                    .iter()
-                                                    .map(|message| message.content.as_str())
-                                                    .collect::<Vec<_>>()
-                                                    .join("\n\n");
-                                                context.copy_text(text);
-                                            }
-                                            ui.close();
-                                        }
-                                    },
-                                );
-                                ui.menu_button(
-                                    RichText::new("View").color(theme::menu_text()),
-                                    |ui| {
-                                        ui.checkbox(&mut self.sidebar_visible, "Sidebar");
-                                        ui.checkbox(&mut self.show_archived, "Archived chats");
-                                        if ui.button("Search chats").clicked() {
-                                            self.search_open = true;
-                                            self.sidebar_visible = true;
-                                            ui.close();
-                                        }
-                                    },
-                                );
-                                ui.menu_button(
-                                    RichText::new("Help").color(theme::menu_text()),
-                                    |ui| {
-                                        ui.label("ReDox · Native Rust client");
-                                        ui.hyperlink_to(
-                                            "Codex app-server documentation",
-                                            "https://learn.chatgpt.com/docs/app-server",
-                                        );
-                                    },
-                                );
-                            });
-                        },
-                    );
-                    ui.scope(|ui| {
-                        ui.visuals_mut().override_text_color = Some(theme::menu_text());
-                        self.ui_picker(ui, "title_ui_picker");
-                    });
+                    self.main_menus(ui, context);
                     let drag_width = (ui.available_width() - 108.0).max(0.0);
                     let (_, drag) =
                         ui.allocate_exact_size(vec2(drag_width, 30.0), Sense::click_and_drag());
@@ -143,7 +53,89 @@ impl ReDox {
             });
     }
 
-    fn navigate(&mut self, direction: isize) {
+    pub(super) fn main_menus(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
+        ui.allocate_ui_with_layout(
+            vec2(184.0, 30.0),
+            Layout::left_to_right(Align::Center),
+            |ui| {
+                egui::MenuBar::new().ui(ui, |ui| {
+                    ui.spacing_mut().item_spacing.x = 10.0;
+                    ui.menu_button(RichText::new("File").color(theme::menu_text()), |ui| {
+                        if ui
+                            .add_enabled(
+                                self.can_new_chat(),
+                                egui::Button::new(if cfg!(target_os = "macos") {
+                                    "New chat     ⌘N"
+                                } else {
+                                    "New chat     Ctrl+N"
+                                }),
+                            )
+                            .clicked()
+                        {
+                            self.new_chat();
+                            ui.close();
+                        }
+                        if ui.button("Open project").clicked() {
+                            self.pick_workspace(context);
+                            ui.close();
+                        }
+                        if ui.button("Add files").clicked() {
+                            self.pick_files(context);
+                            ui.close();
+                        }
+                        if ui.button("Settings").clicked() {
+                            self.settings_open = true;
+                            ui.close();
+                        }
+                        ui.separator();
+                        if ui.button("Exit").clicked() {
+                            context.send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
+                    });
+                    ui.menu_button(RichText::new("Edit").color(theme::menu_text()), |ui| {
+                        if ui.button("Rename chat").clicked() {
+                            self.rename_open = true;
+                            ui.close();
+                        }
+                        if ui.button("Copy conversation").clicked() {
+                            if let Some(chat) = self.session.active() {
+                                let text = chat
+                                    .messages
+                                    .iter()
+                                    .map(|message| message.content.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join("\n\n");
+                                context.copy_text(text);
+                            }
+                            ui.close();
+                        }
+                    });
+                    ui.menu_button(RichText::new("View").color(theme::menu_text()), |ui| {
+                        ui.checkbox(&mut self.sidebar_visible, "Sidebar");
+                        ui.checkbox(&mut self.show_archived, "Archived chats");
+                        if ui.button("Search chats").clicked() {
+                            self.search_open = true;
+                            self.sidebar_visible = true;
+                            ui.close();
+                        }
+                    });
+                    ui.menu_button(RichText::new("Help").color(theme::menu_text()), |ui| {
+                        ui.label("ReDox · Native Rust client");
+                        ui.hyperlink_to(
+                            "Codex app-server documentation",
+                            "https://learn.chatgpt.com/docs/app-server",
+                        );
+                    });
+                });
+            },
+        );
+        ui.scope(|ui| {
+            ui.visuals_mut().override_text_color = Some(theme::menu_text());
+            self.ui_picker(ui, "title_ui_picker");
+        });
+    }
+
+    pub(super) fn navigate(&mut self, direction: isize) {
         let chats: Vec<_> = self
             .session
             .chats

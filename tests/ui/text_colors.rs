@@ -66,7 +66,7 @@ fn live_updates_change_default_text_without_changing_menu_text() {
     let context = egui::Context::default();
     let base = Palette::default();
     set_palette(base);
-    apply(&context);
+    apply(&context, "codex");
     let new = TextColors {
         input_background: None,
         general: Some([210, 220, 230]),

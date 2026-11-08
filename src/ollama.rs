@@ -193,12 +193,97 @@ fn client() -> Result<reqwest::Client, String> {
         .map_err(|error| error.to_string())
 }
 
-async fn checked(response: reqwest::Response) -> Result<reqwest::Response, String> {
+struct RequestError {
+    message: String,
+    retryable: bool,
+}
+
+impl RequestError {
+    fn retryable(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            retryable: true,
+        }
+    }
+
+    fn terminal(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            retryable: false,
+        }
+    }
+
+    fn transport(operation: &str, error: reqwest::Error) -> Self {
+        Self {
+            message: format!("{operation}: {error}"),
+            retryable: !error.is_builder() && !error.is_redirect(),
+        }
+    }
+}
+
+#[derive(Default)]
+struct Retry {
+    failures: usize,
+}
+
+impl Retry {
+    async fn after_failure(
+        &mut self,
+        sender: Option<&mpsc::Sender<ProviderEvent>>,
+        operation: &str,
+        error: RequestError,
+    ) -> Result<(), String> {
+        const BACKOFF_MS: [u64; 3] = [500, 1000, 2000];
+        let max_attempts = BACKOFF_MS.len() + 1;
+        if !error.retryable {
+            return Err(error.message);
+        }
+        let Some(&delay) = BACKOFF_MS.get(self.failures) else {
+            return Err(format!(
+                "Ollama {operation} failed after {max_attempts} attempts. {}",
+                error.message
+            ));
+        };
+        self.failures += 1;
+        if let Some(sender) = sender {
+            send(
+                sender,
+                ProviderEvent::Status(format!(
+                    "Ollama · retrying {operation} (attempt {}/{max_attempts}): {}",
+                    self.failures + 1,
+                    error.message
+                )),
+            )
+            .await?;
+        }
+        tokio::time::sleep(Duration::from_millis(delay)).await;
+        Ok(())
+    }
+}
+
+async fn retry<T, F>(
+    sender: Option<&mpsc::Sender<ProviderEvent>>,
+    operation: &str,
+    mut attempt: impl FnMut() -> F,
+) -> Result<T, String>
+where
+    F: Future<Output = Result<T, RequestError>>,
+{
+    let mut retry = Retry::default();
+    loop {
+        match attempt().await {
+            Ok(value) => return Ok(value),
+            Err(error) => retry.after_failure(sender, operation, error).await?,
+        }
+    }
+}
+
+async fn checked(response: reqwest::Response) -> Result<reqwest::Response, RequestError> {
     if response.status().is_success() {
         return Ok(response);
     }
     let status = response.status();
-    let text = response.text().await.map_err(|error| error.to_string())?;
+    let text = response.text().await.unwrap_or_else(|error| error.to_string());
     let error = serde_json::from_str::<Value>(&text)
         .ok()
         .and_then(|value| value["error"].as_str().map(str::to_owned))
@@ -208,34 +293,48 @@ async fn checked(response: reqwest::Response) -> Result<reqwest::Response, Strin
     } else {
         ""
     };
-    Err(format!(
-        "Ollama {status}: {hint}{}",
-        error.chars().take(600).collect::<String>()
-    ))
+    Err(RequestError {
+        message: format!(
+            "Ollama {status}: {hint}{}",
+            error.chars().take(600).collect::<String>()
+        ),
+        retryable: status.is_server_error()
+            || matches!(
+                status,
+                reqwest::StatusCode::REQUEST_TIMEOUT | reqwest::StatusCode::TOO_MANY_REQUESTS
+            ),
+    })
 }
 
 pub async fn list_models(endpoint: &str) -> Result<Vec<Model>, String> {
-    let response = client()?
-        .get(api_url(endpoint, "tags")?)
-        .timeout(Duration::from_secs(10))
-        .send()
-        .await
-        .map_err(|error| {
-            format!("Cannot connect to Ollama. Start Ollama and check the server URL. {error}")
-        })?;
-    let data: Value = checked(response)
-        .await?
-        .json()
-        .await
-        .map_err(|error| error.to_string())?;
-    let models = data
-        .get("models")
-        .ok_or("Ollama returned no model list.")?
-        .clone();
-    let mut models: Vec<Model> = serde_json::from_value(models)
-        .map_err(|error| format!("Invalid Ollama model list: {error}"))?;
-    models.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(models)
+    #[derive(Deserialize)]
+    struct ModelList {
+        models: Vec<Model>,
+    }
+
+    let client = client()?;
+    let url = api_url(endpoint, "tags")?;
+    retry(None, "model discovery", || async {
+        let response = client
+            .get(url.clone())
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await
+            .map_err(|error| {
+                RequestError::transport(
+                    "Cannot connect to Ollama. Start Ollama and check the server URL",
+                    error,
+                )
+            })?;
+        let ModelList { mut models } = checked(response)
+            .await?
+            .json()
+            .await
+            .map_err(|error| RequestError::transport("Invalid Ollama model list", error))?;
+        models.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(models)
+    })
+    .await
 }
 
 #[derive(Default)]
@@ -250,22 +349,29 @@ struct Reply {
 }
 
 impl Reply {
-	fn accept(&mut self, line: &[u8]) -> Result<String, String> {
+	fn accept(&mut self, line: &[u8]) -> Result<String, RequestError> {
 		let value: Value = serde_json::from_slice(line)
-			.map_err(|error| format!("Invalid Ollama stream: {error}"))?;
+			.map_err(|error| RequestError::retryable(format!("Invalid Ollama response: {error}")))?;
 		if let Some(error) = value["error"].as_str() {
-			return Err(format!("Ollama: {error}"));
+			let hint = if error.to_ascii_lowercase().contains("cuda") {
+				" Enable CPU only in Agents and retry."
+			} else {
+				""
+			};
+			return Err(RequestError::retryable(format!(
+				"Ollama: {}{hint}", error.chars().take(600).collect::<String>()
+			)));
 		}
 		let content = value["message"]["content"].as_str().unwrap_or_default();
 		let thinking = value["message"]["thinking"].as_str().unwrap_or_default();
 		self.bytes = self.bytes.saturating_add(line.len());
 		if self.bytes > 8 * 1024 * 1024 {
-			return Err("Ollama response exceeded the 8 MiB limit.".into());
+			return Err(RequestError::terminal("Ollama response exceeded the 8 MiB limit."));
 		}
 		self.content.push_str(content);
 		self.thinking.push_str(thinking);
 		if self.content.len() > 2 * 1024 * 1024 {
-			return Err("Local response exceeded the 2 MiB text limit.".into());
+			return Err(RequestError::terminal("Local response exceeded the 2 MiB text limit."));
 		}
 		if let Some(calls) = value["message"]["tool_calls"].as_array() {
 			for call in calls {
@@ -294,18 +400,21 @@ pub async fn stream_chat(
 	let desktop_cancel = cancel.clone();
 	let work = async {
 		let client = client()?;
-		let info = checked(
-			client
-				.post(api_url(&request.settings.endpoint, "show")?)
+		let show_url = api_url(&request.settings.endpoint, "show")?;
+		let chat_url = api_url(&request.settings.endpoint, "chat")?;
+		let info: Value = retry(Some(&sender), "model information", || async {
+			let response = client
+				.post(show_url.clone())
 				.json(&json!({"model":request.model}))
 				.send()
 				.await
-				.map_err(|error| error.to_string())?,
-		)
-		.await?
-		.json::<Value>()
-		.await
-		.map_err(|error| error.to_string())?;
+				.map_err(|error| RequestError::transport("Cannot load Ollama model information", error))?;
+			checked(response)
+				.await?
+				.json()
+				.await
+				.map_err(|error| RequestError::transport("Invalid Ollama model information", error))
+		}).await?;
 		let capabilities = info["capabilities"].as_array().cloned().unwrap_or_default();
 		let supports = |name: &str| capabilities.iter().any(|value| value == name);
 		let with_project_tools =
@@ -391,10 +500,11 @@ pub async fn stream_chat(
 		let mut stats = Stats::default();
 		let mut desktop_approved = false;
 		let mut desktop_calls = 0;
+		let mut output_offset = 0;
 		loop {
 			if conversation.needs_compaction() {
 				send(&sender, ProviderEvent::Status(format!("Ollama · {}: saving progress and compacting context", request.model))).await?;
-				conversation.compact(&request, &client, supports("thinking"), &mut stats).await?;
+				conversation.compact(&request, &client, &chat_url, &sender, supports("thinking"), &mut stats).await?;
 			}
 
 			let mut body = json!({"model":request.model,"messages":conversation.messages,"stream":true,"options":{"num_ctx":context,"num_predict":output}});
@@ -407,7 +517,15 @@ pub async fn stream_chat(
 			if supports("thinking") {
 				body["think"] = json!(false);
 			}
-			let reply = stream_reply(&client, &request.settings.endpoint, &body, &sender).await?;
+			let mut preview = ReplyPreview { offset: output_offset, visible: false };
+			let mut retry = Retry::default();
+			let reply = loop {
+				match stream_reply(&client, &chat_url, &body, &sender, &mut preview).await {
+					Ok(reply) => break reply,
+					Err(error) => retry.after_failure(Some(&sender), "response", error).await?,
+				}
+			};
+			output_offset += reply.content.len();
 			stats.add(&reply.stats);
 			if !reply.content.is_empty() {
 				conversation.journal.record(format!("Assistant{}:\n{}", if reply.truncated { " (output limit reached; unfinished)" } else { "" }, reply.content))?;
@@ -419,9 +537,6 @@ pub async fn stream_chat(
 			}
 
 			if reply.calls.is_empty() {
-				if reply.content.is_empty() {
-					return Err("Ollama returned no answer. Try a larger response token limit or a different model.".into());
-				}
 				conversation.journal.progress.status = state::Status::Complete;
 				conversation.journal.save()?;
 				send(&sender, ProviderEvent::Metrics(stats)).await?;
@@ -433,6 +548,7 @@ pub async fn stream_chat(
 			conversation.journal.record(format!("Requested tools (results below confirm execution):\n{}", serde_json::to_string(&reply.calls).map_err(|error| error.to_string())?))?;
 			conversation.messages.push(json!({"role":"assistant","content":reply.content,"thinking":reply.thinking,"tool_calls":reply.calls}));
 			send(&sender, ProviderEvent::Content("\n\n".into())).await?;
+			output_offset += 2;
 			for (index, call) in reply.calls.into_iter().enumerate() {
 				let function = &call["function"];
 				let name = function["name"].as_str().unwrap_or_default();
@@ -472,16 +588,56 @@ pub async fn stream_chat(
 	}
 }
 
+struct ReplyPreview {
+	offset: usize,
+	visible: bool,
+}
 
-async fn stream_reply(client: &reqwest::Client, endpoint: &str, body: &Value, sender: &mpsc::Sender<ProviderEvent>) -> Result<Reply, String> {
-	let response = client.post(api_url(endpoint, "chat")?).json(body).send().await.map_err(|error| format!("Ollama request failed: {error}"))?;
+impl ReplyPreview {
+	async fn publish(
+		&mut self,
+		sender: &mpsc::Sender<ProviderEvent>,
+		text: String,
+		replace: &mut bool,
+	) -> Result<(), RequestError> {
+		let event = if std::mem::take(replace) {
+			ProviderEvent::ReplaceContent { offset: self.offset, text }
+		} else {
+			ProviderEvent::Content(text)
+		};
+		self.visible = true;
+		send(sender, event).await.map_err(RequestError::terminal)
+	}
+}
+
+async fn stream_reply(
+	client: &reqwest::Client,
+	url: &url::Url,
+	body: &Value,
+	sender: &mpsc::Sender<ProviderEvent>,
+	preview: &mut ReplyPreview,
+) -> Result<Reply, RequestError> {
+	let response = client
+		.post(url.clone())
+		.json(body)
+		.send()
+		.await
+		.map_err(|error| RequestError::transport("Ollama request failed", error))?;
 	let mut response = checked(response).await?;
 	let mut reply = Reply::default();
 	let mut buffer = Vec::new();
+	let mut replace = preview.visible;
 
-	while let Some(chunk) = response.chunk().await.map_err(|error| format!("Ollama stream failed: {error}"))? {
+	while let Some(chunk) = response
+		.chunk()
+		.await
+		.map_err(|error| RequestError::transport("Ollama stream failed", error))?
+	{
 		buffer.extend_from_slice(&chunk);
 		while let Some(end) = buffer.iter().position(|byte| *byte == b'\n') {
+			if end > 2 * 1024 * 1024 {
+				return Err(RequestError::terminal("Ollama stream record exceeded the 2 MiB limit."));
+			}
 			let line: Vec<_> = buffer.drain(..=end).collect();
 			if line.iter().all(u8::is_ascii_whitespace) {
 				continue;
@@ -489,25 +645,36 @@ async fn stream_reply(client: &reqwest::Client, endpoint: &str, body: &Value, se
 
 			let content = reply.accept(&line)?;
 			if !content.is_empty() {
-				send(sender, ProviderEvent::Content(content)).await?;
+				preview.publish(sender, content, &mut replace).await?;
 			}
-		}
-		if buffer.len() > 2 * 1024 * 1024 {
-			return Err("Ollama stream record exceeded the 2 MiB limit.".into());
+			if reply.done {
+				break;
+			}
 		}
 		if reply.done {
 			break;
+		}
+		if buffer.len() > 2 * 1024 * 1024 {
+			return Err(RequestError::terminal("Ollama stream record exceeded the 2 MiB limit."));
 		}
 	}
 
 	if !buffer.iter().all(u8::is_ascii_whitespace) && !reply.done {
 		let content = reply.accept(&buffer)?;
 		if !content.is_empty() {
-			send(sender, ProviderEvent::Content(content)).await?;
+			preview.publish(sender, content, &mut replace).await?;
 		}
 	}
 	if !reply.done {
-		return Err("Ollama disconnected before completing the response. Partial text was kept.".into());
+		return Err(RequestError::retryable("Ollama disconnected before completing the response."));
+	}
+	if reply.content.trim().is_empty() && (reply.calls.is_empty() || reply.truncated) {
+		return Err(RequestError::retryable(
+			"Ollama returned no answer. Try a larger response token limit or a different model.",
+		));
+	}
+	if replace {
+		preview.publish(sender, String::new(), &mut replace).await?;
 	}
 	Ok(reply)
 }

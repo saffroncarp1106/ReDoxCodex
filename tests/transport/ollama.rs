@@ -2,17 +2,25 @@ use super::*;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
+use crate::run::{RunEvent, Update, apply_event};
+
 pub(crate) type Requests = Arc<Mutex<Vec<(String, Value)>>>;
 
 pub(crate) fn server(
     responses: Vec<(&'static str, String)>,
+) -> (String, Requests, std::thread::JoinHandle<()>) {
+    server_with_status(responses.into_iter().map(|(path, body)| (path, 200, body)).collect())
+}
+
+fn server_with_status(
+    responses: Vec<(&'static str, u16, String)>,
 ) -> (String, Requests, std::thread::JoinHandle<()>) {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let endpoint = format!("http://{}", listener.local_addr().unwrap());
     let requests = Arc::new(Mutex::new(Vec::new()));
     let captured = requests.clone();
     let handle = std::thread::spawn(move || {
-        for (expected_path, body) in responses {
+        for (expected_path, status, body) in responses {
             let (mut socket, _) = listener.accept().unwrap();
             socket
                 .set_read_timeout(Some(Duration::from_secs(5)))
@@ -46,7 +54,7 @@ pub(crate) fn server(
                 expected_path.into(),
                 serde_json::from_slice(&payload).unwrap_or(Value::Null),
             ));
-            write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).unwrap();
+            write!(socket, "HTTP/1.1 {status} Response\r\nContent-Type: application/x-ndjson\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).unwrap();
             for chunk in body.as_bytes().chunks(3) {
                 socket.write_all(chunk).unwrap();
             }
@@ -206,25 +214,30 @@ async fn token_limited_output_continues_without_executing_incomplete_tools() {
 }
 
 #[tokio::test]
-async fn failed_context_summary_preserves_the_action_results_in_steps() {
-	let (endpoint, _, handle) = server(vec![
+async fn failed_context_summary_continues_from_the_saved_action_results() {
+	let mut responses = vec![
 		("/api/show", json!({"capabilities":["tools"]}).to_string()),
 		("/api/chat", read_reply(1)),
-		("/api/chat", text_reply("")),
-	]);
+	];
+	responses.extend((0..4).map(|_| ("/api/chat", text_reply(""))));
+	responses.push(("/api/chat", text_reply("Continued from saved steps.")));
+	let (endpoint, captured, handle) = server(responses);
 	let request = project_request(endpoint);
 	std::fs::write(request.workspace.as_ref().unwrap().join("note.txt"), "RECOVERABLE_DATA ".repeat(4000)).unwrap();
 	let checkpoint = request.checkpoint.clone().unwrap();
 	let (sender, _events) = mpsc::channel(128);
 	let (_cancel, receiver) = watch::channel(false);
-	let error = stream_chat(request, sender, receiver).await.unwrap_err();
+	stream_chat(request, sender, receiver).await.unwrap();
 	handle.join().unwrap();
 
-	assert!(error.contains("could not summarize"));
 	let saved = std::fs::read_to_string(checkpoint).unwrap();
 	assert!(saved.contains("Tool result: read_file"));
 	assert!(saved.contains("RECOVERABLE_DATA"));
-	assert!(saved.contains("Status: in progress"));
+	assert!(saved.contains("Status: complete"));
+	let calls = captured.lock().unwrap();
+	assert!(calls[2..6].iter().all(|(_, body)| body["stream"] == false));
+	assert_eq!(calls[6].1["stream"], true);
+	assert!(calls[6].1["messages"].to_string().contains("RECOVERABLE_DATA"));
 }
 
 #[tokio::test]
@@ -348,23 +361,28 @@ async fn local_agent_executes_a_project_tool_and_supplies_its_result_to_the_mode
 }
 
 #[tokio::test]
-async fn disconnected_streams_fail_and_pre_cancelled_requests_do_not_connect() {
-    let (endpoint, _, handle) = server(vec![
+async fn exhausted_stream_retries_keep_partial_text_and_pre_cancel_does_not_connect() {
+    let mut responses = vec![
         ("/api/show", json!({"capabilities":[]}).to_string()),
         (
             "/api/chat",
             "{\"message\":{\"content\":\"partial\"},\"done\":false}\n".into(),
         ),
-    ]);
+    ];
+    responses.extend((0..3).map(|_| ("/api/chat", String::new())));
+    let (endpoint, _, handle) = server(responses);
     let (sender, mut events) = mpsc::channel(16);
     let (_cancel, receiver) = watch::channel(false);
     assert!(
         stream_chat(request(endpoint, false), sender, receiver)
             .await
             .unwrap_err()
-            .contains("disconnected")
+            .contains("failed after 4 attempts")
     );
     assert!(matches!(events.recv().await, Some(ProviderEvent::Content(text)) if text == "partial"));
+    while let Some(event) = events.recv().await {
+        assert!(matches!(event, ProviderEvent::Status(_)));
+    }
     handle.join().unwrap();
     let (sender, _) = mpsc::channel(16);
     let (_cancel, receiver) = watch::channel(true);
@@ -378,6 +396,93 @@ async fn disconnected_streams_fail_and_pre_cancelled_requests_do_not_connect() {
         .unwrap_err(),
         "Cancelled."
     );
+}
+
+#[tokio::test]
+async fn retries_only_the_failed_step_and_replaces_its_partial_output() {
+    let write = json!({"message":{"content":"Writing the file.","tool_calls":[{
+        "function":{"name":"write_file","arguments":{"path":"done.txt","content":"saved"}}
+    }]},"done":true});
+    let abandoned_call = json!({"message":{"content":"Stale draft.","tool_calls":[{
+        "function":{"name":"write_file","arguments":{"path":"never.txt","content":"unfinished"}}
+    }]},"done":false});
+    let (endpoint, captured, handle) = server_with_status(vec![
+        ("/api/show", 503, json!({"error":"starting"}).to_string()),
+        ("/api/show", 200, json!({"capabilities":["tools"]}).to_string()),
+        ("/api/chat", 200, format!("{write}\n")),
+        ("/api/chat", 200, format!("{abandoned_call}\n{{\"error\":\"runner stopped\"}}\n")),
+        ("/api/chat", 200, text_reply("File saved.")),
+    ]);
+    let mut request = project_request(endpoint);
+    request.mode = Mode::FullAccess;
+    let root = request.workspace.clone().unwrap();
+    let checkpoint = request.checkpoint.clone().unwrap();
+    let (sender, mut events) = mpsc::channel(32);
+    let (_cancel, receiver) = watch::channel(false);
+    stream_chat(request, sender, receiver).await.unwrap();
+    handle.join().unwrap();
+
+    let mut session = crate::domain::Session::default();
+    session.new_chat();
+    let chat = session.active_mut().unwrap();
+    chat.set_provider(crate::domain::Provider::Ollama, "qwen-test".into());
+    chat.draft = "Write a file".into();
+    let run = session.prepare_run().unwrap();
+    let mut retries = 0;
+    while let Some(event) = events.recv().await {
+        let update = match event {
+            ProviderEvent::Content(content) => Update::Content(content),
+            ProviderEvent::ReplaceContent { offset, text } => Update::ReplaceContent { offset, text },
+            ProviderEvent::Status(status) if status.contains("retrying") => {
+                retries += 1;
+                continue;
+            }
+            _ => continue,
+        };
+        apply_event(&mut session, Some(run), RunEvent { run, update });
+    }
+    assert_eq!(
+        session.run_message_mut(run).unwrap().content,
+        "Writing the file.\n\nFile saved."
+    );
+    assert_eq!(retries, 2);
+    assert_eq!(std::fs::read_to_string(root.join("done.txt")).unwrap(), "saved");
+    assert!(!root.join("never.txt").exists());
+    let journal = state::Journal::open(checkpoint, Some(root), "Resume".into()).await.unwrap();
+    assert_eq!(journal.progress.summary.matches("Tool result: write_file").count(), 1);
+    let calls = captured.lock().unwrap();
+    assert_eq!(calls[3].1, calls[4].1);
+}
+
+#[tokio::test]
+async fn stop_cancels_retry_backoff() {
+    let (endpoint, captured, handle) = server(vec![
+        ("/api/show", json!({"capabilities":[]}).to_string()),
+        ("/api/chat", String::new()),
+    ]);
+    let (sender, mut events) = mpsc::channel(16);
+    let (cancel, receiver) = watch::channel(false);
+    let worker = tokio::spawn(stream_chat(request(endpoint, false), sender, receiver));
+
+    assert!(matches!(events.recv().await, Some(ProviderEvent::Status(status)) if status.contains("retrying")));
+    cancel.send(true).unwrap();
+    assert_eq!(worker.await.unwrap().unwrap_err(), "Cancelled.");
+    handle.join().unwrap();
+    assert_eq!(captured.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn permanent_http_error_returns_without_retrying() {
+    let (endpoint, _, handle) = server_with_status(vec![
+        ("/api/show", 200, json!({"capabilities":[]}).to_string()),
+        ("/api/chat", 404, json!({"error":"model not found"}).to_string()),
+    ]);
+    let (sender, mut events) = mpsc::channel(16);
+    let (_cancel, receiver) = watch::channel(false);
+    let error = stream_chat(request(endpoint, false), sender, receiver).await.unwrap_err();
+    handle.join().unwrap();
+    assert!(error.contains("model not found"));
+    assert!(events.recv().await.is_none());
 }
 
 #[cfg(windows)]

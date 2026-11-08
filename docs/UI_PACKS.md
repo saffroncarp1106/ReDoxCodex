@@ -1,6 +1,6 @@
 # UI packs
 
-ReDox ships with `src/ui/layouts/codex.json` and `gemini.json`. Codex is the default. Packs change presentation; model requests still use Codex and your ChatGPT account.
+ReDox ships with Codex, Gemini, Claude, and Windows 98 layouts in `src/ui/layouts/`. Codex is the default. Each layout works with Codex and Ollama.
 
 Use either a single `src/ui/layouts/ocean.json` or a folder:
 
@@ -41,7 +41,7 @@ Import a file or pack folder by dragging it into the app. Alternatively use UI â
 
 Optional: add `"background_image": "background.png"` and include that file beside the config. Subdirectories are supported. Images must be PNG, at most 8 MiB and 4096 Ã— 4096 pixels. Asset references must stay within the pack folder. Background images are supported by both base layouts; the radial glow applies to Gemini's empty home screen.
 
-`layout` accepts `codex` or `gemini`. Other fields are optional and inherit defaults. Colors use six-digit RGB hex strings. `glow_strength` ranges from 0 to 1. Labels are bounded, and configs must be at most 64 KiB. Unknown fields and invalid values produce an explicit error. Copy the complete built-in Gemini config when you want its exact palette as your starting point.
+`layout` accepts `codex`, `gemini`, `claude`, or `win98`. Other fields are optional and inherit defaults. Colors use six-digit RGB hex strings. `glow_strength` ranges from 0 to 1. Labels are bounded, and configs must be at most 64 KiB. Unknown fields and invalid values produce an explicit error. Copy a built-in config to start from its complete palette.
 
 `codex.json` includes every adjustable palette key and a `palette_guide` object describing what each one controls. The guide is optional documentation metadata; edit the actual hex values under `palette`. `menu_text` controls the top menu labels independently of `text` (general text) and `muted` (secondary text and icons). Appearance color-picker choices override `menu_text` and `text` for that layout until **Restore text colors** is selected.
 

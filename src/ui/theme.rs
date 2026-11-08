@@ -113,31 +113,36 @@ pub fn conversation_scroll() -> egui::style::ScrollStyle {
     }
 }
 
-pub fn apply(ctx: &egui::Context) {
+pub fn apply(ctx: &egui::Context, layout: &str) {
+    let classic = layout == super::win98::ID;
     let mut fonts = egui::FontDefinitions::default();
     let font_directory = std::env::var_os("SystemRoot")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| "C:/Windows".into())
         .join("Fonts");
 
-    if let Ok(bytes) = std::fs::read(font_directory.join("segoeui.ttf")) {
+    let (regular, bold) = if classic {
+        ("tahoma.ttf", "tahomabd.ttf")
+    } else {
+        ("segoeui.ttf", "seguisb.ttf")
+    };
+    if let Ok(bytes) = std::fs::read(font_directory.join(regular)) {
         fonts
             .font_data
-            .insert("Segoe UI".into(), egui::FontData::from_owned(bytes).into());
+            .insert(regular.into(), egui::FontData::from_owned(bytes).into());
         fonts
             .families
             .entry(egui::FontFamily::Proportional)
             .or_default()
-            .insert(0, "Segoe UI".into());
+            .insert(0, regular.into());
     }
 
     let mut bold_fonts = fonts.families[&egui::FontFamily::Proportional].clone();
-    if let Ok(bytes) = std::fs::read(font_directory.join("seguisb.ttf")) {
-        fonts.font_data.insert(
-            "Segoe UI Semibold".into(),
-            egui::FontData::from_owned(bytes).into(),
-        );
-        bold_fonts.insert(0, "Segoe UI Semibold".into());
+    if let Ok(bytes) = std::fs::read(font_directory.join(bold)) {
+        fonts
+            .font_data
+            .insert(bold.into(), egui::FontData::from_owned(bytes).into());
+        bold_fonts.insert(0, bold.into());
     }
     fonts
         .families
@@ -196,6 +201,9 @@ pub fn apply(ctx: &egui::Context) {
         style.spacing.scroll.bar_width = 5.0;
         style.spacing.scroll.floating = true;
     });
+    if classic {
+        super::win98::apply_style(ctx);
+    }
 }
 
 #[cfg(test)]

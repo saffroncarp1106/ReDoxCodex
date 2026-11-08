@@ -144,7 +144,7 @@ impl ReDox {
             palette = colors.apply(palette);
         }
         theme::set_palette(palette);
-        theme::apply(&context.egui_ctx);
+        theme::apply(&context.egui_ctx, &active_ui.config.layout);
         let ui_background = active_ui
             .config
             .background_image

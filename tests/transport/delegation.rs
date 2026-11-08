@@ -15,9 +15,16 @@ fn task(id: &str) -> Task {
 }
 
 #[tokio::test]
-async fn worker_results_return_to_codex_while_progress_and_usage_stay_visible_in_agents() {
+async fn recovered_worker_results_return_to_codex_and_agents() {
     let (endpoint, captured, handle) = ollama::tests::server(vec![
         ("/api/show", json!({"capabilities":[]}).to_string()),
+        (
+            "/api/chat",
+            format!(
+                "{}\n",
+                json!({"message":{"content":"Abandoned output"},"done":false})
+            ),
+        ),
         (
             "/api/chat",
             format!(
@@ -38,6 +45,7 @@ async fn worker_results_return_to_codex_while_progress_and_usage_stay_visible_in
         settings, None, Mode::Chat, sender, receiver)).await.unwrap().unwrap();
     handle.join().unwrap();
     assert!(result.contains("LOCAL_REVIEW_RESULT"));
+    assert!(!result.contains("Abandoned output"));
     assert_eq!(tool_result(Ok(result))["success"], true);
     let mut tasks = Vec::new();
     let mut tokens = 0;

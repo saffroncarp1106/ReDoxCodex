@@ -18,6 +18,7 @@ fn builtins_and_new_configs_are_discovered() {
     assert!(catalog.packs.iter().any(|pack| pack.id == "codex"));
     assert!(catalog.packs.iter().any(|pack| pack.id == "gemini"));
     assert!(catalog.packs.iter().any(|pack| pack.id == "claude"));
+    assert!(catalog.packs.iter().any(|pack| pack.id == "win98"));
     assert!(catalog.packs.iter().any(|pack| pack.config.name == "Ocean"));
 }
 

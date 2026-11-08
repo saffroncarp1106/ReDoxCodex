@@ -28,6 +28,12 @@ pub(super) const RENDERERS: &[Renderer] = &[
         rail: ReDox::claude_rail,
         conversation: ReDox::claude_conversation,
     },
+    Renderer {
+        id: super::win98::ID,
+        config: include_str!("layouts/win98.json"),
+        rail: ReDox::win98_desktop,
+        conversation: ReDox::win98_conversation,
+    },
 ];
 
 pub(super) fn resolve(id: &str) -> &'static Renderer {

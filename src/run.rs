@@ -14,6 +14,7 @@ pub enum Update {
     Delegation(crate::delegation::Event),
     Metrics(crate::ollama::Stats),
     Content(String),
+    ReplaceContent { offset: usize, text: String },
     Complete,
     Cancelled,
     Failed(String),
@@ -113,6 +114,9 @@ impl Running {
                     ProviderEvent::Metrics(stats) => Update::Metrics(stats),
                     ProviderEvent::Thread(thread) => Update::Thread(thread),
                     ProviderEvent::Content(text) => Update::Content(text),
+                    ProviderEvent::ReplaceContent { offset, text } => {
+                        Update::ReplaceContent { offset, text }
+                    }
                     ProviderEvent::Status(text) => Update::Status(text),
                     ProviderEvent::Approval(approval) => Update::Approval(approval),
                 };
@@ -251,6 +255,15 @@ pub fn apply_event(session: &mut Session, active: Option<RunId>, event: RunEvent
         }
         Update::Content(text) => {
             if let Some(message) = session.run_message_mut(event.run) {
+                message.content.push_str(&text);
+            }
+            false
+        }
+        Update::ReplaceContent { offset, text } => {
+            if let Some(message) = session.run_message_mut(event.run)
+                && message.content.is_char_boundary(offset)
+            {
+                message.content.truncate(offset);
                 message.content.push_str(&text);
             }
             false
