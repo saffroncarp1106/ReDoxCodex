@@ -317,7 +317,7 @@ fn model_choices(
             expanded = !expanded;
         }
         if expanded {
-            egui::ScrollArea::vertical()
+            super::scroll::ScrollArea::vertical()
                 .id_salt("model_choices_scroll")
                 .max_height(220.0)
                 .show(ui, |ui| {

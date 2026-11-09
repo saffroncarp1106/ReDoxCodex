@@ -23,6 +23,7 @@ pub(super) mod project_window;
 mod queue;
 mod renderers;
 mod response_text;
+mod scroll;
 mod settings;
 mod shell;
 pub(super) mod skins;

@@ -50,7 +50,7 @@ impl ReDox {
                     self.approval_details_open = !self.approval_details_open;
                 }
                 if self.approval_details_open {
-                    egui::ScrollArea::vertical()
+                    super::scroll::ScrollArea::vertical()
                         .max_height(160.0)
                         .show(ui, |ui| {
                             ui.add(

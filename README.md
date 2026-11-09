@@ -10,6 +10,10 @@ On macOS or Linux, with Rust and the native platform build dependencies installe
 
 After you discover **Windows 98**, choose it from the **UI** menu for the teal desktop, classic chat window, and Start taskbar. **My Chats**, **Open Project**, and **Ollama Agents** open their corresponding ReDox tools.
 
+The Windows 98 top bar uses a compact blue gradient caption, pixel-drawn window controls, and a gray menu row.
+
+Windows 98 uses classic scrollbars with arrow buttons, beveled gray thumbs, and a dithered track. Codex history and Projects have gray headers above separate white, bordered scroll areas with matching left and right edges. Archived projects sits below the Projects list; expanded archive rows are compact and the list scrolls within a 120-point height limit. Arrow buttons support holding to repeat; mouse wheel, thumb dragging, and track clicks remain available.
+
 Startup restores the saved window size. Saved sizes below the 900 × 600 minimum recover to 1100 × 900 before the window opens.
 
 Chat rows have a small **×** button to archive locally. Open **Archived chats** and use **↶** to restore them. These choices persist across restarts and history refreshes without changing the server's archive state. Chats generating a response must finish or stop before archiving.

@@ -87,7 +87,7 @@ fn render(ui: &mut egui::Ui, source: &str) {
                             vec2((width - 36.0).max(1.0), 24.0),
                             egui::Layout::top_down(egui::Align::Min),
                             |ui| {
-                                egui::ScrollArea::horizontal().show(ui, |ui| {
+                                super::scroll::ScrollArea::horizontal().show(ui, |ui| {
                                     ui.label(
                                         RichText::new(code.trim_end_matches('\n')).monospace(),
                                     );
@@ -257,7 +257,7 @@ impl MathCache {
                     draw(ui);
                 } else {
                     ui.add_space(6.0);
-                    egui::ScrollArea::horizontal()
+                    super::scroll::ScrollArea::horizontal()
                         .id_salt(("equation", source))
                         .max_width(ui.available_width())
                         .auto_shrink([false, true])

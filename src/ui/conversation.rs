@@ -456,7 +456,7 @@ pub(super) fn render_transcript(
     codex_mode: bool,
 ) {
     ui.spacing_mut().scroll = theme::conversation_scroll();
-    egui::ScrollArea::vertical()
+    super::scroll::ScrollArea::vertical()
         .id_salt(scroll_id)
         .horizontal_scroll_offset(0.0)
         .stick_to_bottom(true)

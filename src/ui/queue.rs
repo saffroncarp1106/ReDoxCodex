@@ -89,7 +89,7 @@ impl ReDox {
         let mut cancel = None;
         let now = Instant::now();
         ui.label(egui::RichText::new(format!("Queued messages ({count})")).small());
-        egui::ScrollArea::vertical()
+        super::scroll::ScrollArea::vertical()
             .id_salt(("queued_messages", chat.id))
             .max_height(108.0)
             .auto_shrink([false, true])

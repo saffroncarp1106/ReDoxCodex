@@ -57,11 +57,12 @@ impl ReDox {
 
     pub(super) fn main_menus(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
         ui.allocate_ui_with_layout(
-            vec2(184.0, 30.0),
+            vec2(184.0, if ui.visuals().dark_mode { 30.0 } else { 20.0 }),
             Layout::left_to_right(Align::Center),
             |ui| {
                 egui::MenuBar::new().ui(ui, |ui| {
-                    ui.spacing_mut().item_spacing.x = 10.0;
+                    ui.spacing_mut().item_spacing.x =
+                        if ui.visuals().dark_mode { 10.0 } else { 2.0 };
                     ui.menu_button(RichText::new("File").color(theme::menu_text()), |ui| {
                         if ui
                             .add_enabled(
@@ -331,141 +332,52 @@ impl ReDox {
                 }
 
                 ui.add_space(5.0);
-                egui::ScrollArea::vertical()
-                    .id_salt("sidebar_scroll")
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        self.history_section(ui, context);
-                        sidebar_list(ui, |ui| {
-                            let query = self.search_query.to_lowercase();
-                            let archived = self.show_archived;
-                            let visible = |chat: &&redox::domain::Chat| {
-                                chat.archived == archived
-                                    && chat.title.to_lowercase().contains(&query)
-                            };
-                            if self.show_archived {
-                                section_label(ui, "Archived");
-                                let chats: Vec<_> = self
-                                    .session
-                                    .chats
-                                    .iter()
-                                    .rev()
-                                    .filter(visible)
-                                    .map(|chat| (chat.id, chat.title.clone()))
-                                    .collect();
-                                if chats.is_empty() {
-                                    ui.label(RichText::new("No archived chats").color(muted()));
-                                }
-                                self.chat_rows(ui, &chats, 20.0);
-                                return;
-                            }
-
-                            egui::CollapsingHeader::new("Archived projects").show(ui, |ui| {
-                                for path in self.session.archived_projects.clone() {
-                                    ui.horizontal(|ui| {
-                                        ui.label(
-                                            path.file_name()
-                                                .unwrap_or(path.as_os_str())
-                                                .to_string_lossy(),
-                                        );
-                                        if ui.small_button("Restore").clicked() {
-                                            self.session
-                                                .archived_projects
-                                                .retain(|item| item != &path);
-                                        }
-                                    });
-                                }
-                            });
-                            section_label(ui, "Projects");
-                            let mut projects = Vec::new();
-                            if let Some(path) = &self.session.workspace {
-                                projects.push(path.clone());
-                            }
-                            for chat in &self.session.chats {
-                                if let Some(path) = &chat.workspace
-                                    && !projects.contains(path)
-                                {
-                                    projects.push(path.clone());
-                                }
-                            }
-
-                            for path in projects {
-                                if self.session.archived_projects.contains(&path) {
-                                    continue;
-                                }
-                                let name = path
-                                    .file_name()
-                                    .unwrap_or(path.as_os_str())
-                                    .to_string_lossy();
-                                let project =
-                                    sidebar_row(ui, &name, false, 8.0, Some(Icon::Folder))
-                                        .on_hover_text(path.display().to_string());
-                                project.context_menu(|ui| {
-                                    if ui.button("Archive project").clicked() {
-                                        self.session.archived_projects.push(path.clone());
-                                        ui.close();
-                                    }
-                                });
-                                self.project_drag(ui, &project, &path);
-                                if project.clicked() {
-                                    self.session.workspace = Some(path.clone());
-                                    if let Some(chat) = self
-                                        .session
-                                        .active()
-                                        .filter(|chat| {
-                                            !chat.archived && chat.workspace.as_ref() == Some(&path)
-                                        })
-                                        .or_else(|| {
-                                            self.session.chats.iter().rev().find(|chat| {
-                                                !chat.archived
-                                                    && chat.workspace.as_ref() == Some(&path)
-                                            })
-                                        })
-                                    {
-                                        self.session.active_chat = Some(chat.id);
-                                    } else {
-                                        self.new_project_chat(path.clone());
-                                    }
-                                }
-                                let chats: Vec<_> = self
-                                    .session
-                                    .chats
-                                    .iter()
-                                    .rev()
-                                    .filter(visible)
-                                    .filter(|chat| chat.workspace.as_ref() == Some(&path))
-                                    .map(|chat| (chat.id, chat.title.clone()))
-                                    .collect();
-                                if chats.is_empty() {
-                                    ui.horizontal(|ui| {
-                                        ui.add_space(32.0);
-                                        ui.label(
-                                            RichText::new("No chats").color(Color32::from_gray(92)),
-                                        );
-                                    });
-                                }
-                                self.chat_rows(ui, &chats, 32.0);
-                                ui.add_space(7.0);
-                            }
-
-                            if sidebar_row(ui, "New project", false, 8.0, Some(Icon::Folder))
-                                .clicked()
-                            {
-                                self.pick_workspace(context);
-                            }
-                            ui.add_space(25.0);
-                            section_label(ui, "Recents");
-                            let chats: Vec<_> = self
-                                .session
-                                .chats
-                                .iter()
-                                .rev()
-                                .filter(visible)
-                                .map(|chat| (chat.id, chat.title.clone()))
-                                .collect();
-                            self.chat_rows(ui, &chats, 8.0);
-                        });
+                if classic {
+                    let history_height = (ui.available_height() * 0.30).clamp(90.0, 240.0);
+                    self.history_header(ui, context);
+                    sidebar_list(ui, |ui| {
+                        super::scroll::ScrollArea::vertical()
+                            .id_salt("classic_history_section")
+                            .max_height(history_height)
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| self.history_section(ui, context));
                     });
+                    ui.add_space(4.0);
+                    egui::TopBottomPanel::bottom("classic_archived_projects")
+                        .resizable(false)
+                        .min_height(0.0)
+                        .max_height(150.0)
+                        .show_separator_line(false)
+                        .frame(
+                            Frame::NONE
+                                .fill(sidebar())
+                                .inner_margin(Margin::symmetric(0, 4)),
+                        )
+                        .show_inside(ui, |ui| self.archived_projects_section(ui));
+                    section_label(
+                        ui,
+                        if self.show_archived {
+                            "Archived"
+                        } else {
+                            "Projects"
+                        },
+                    );
+                    sidebar_list(ui, |ui| {
+                        super::scroll::ScrollArea::vertical()
+                            .id_salt("classic_projects_section")
+                            .max_height((ui.available_height() - 6.0).max(0.0))
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| self.project_section(ui, context));
+                    });
+                } else {
+                    super::scroll::ScrollArea::vertical()
+                        .id_salt("sidebar_scroll")
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            self.history_section(ui, context);
+                            sidebar_list(ui, |ui| self.project_section(ui, context));
+                        });
+                }
                 let right = ui.max_rect().right() + 8.0;
                 ui.painter().line_segment(
                     [
@@ -475,6 +387,126 @@ impl ReDox {
                     Stroke::new(1.0_f32, border()),
                 );
             });
+    }
+
+    fn project_section(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
+        let query = self.search_query.to_lowercase();
+        let archived = self.show_archived;
+        let visible = |chat: &&redox::domain::Chat| {
+            chat.archived == archived && chat.title.to_lowercase().contains(&query)
+        };
+        if self.show_archived {
+            if ui.visuals().dark_mode {
+                section_label(ui, "Archived");
+            }
+            let chats: Vec<_> = self
+                .session
+                .chats
+                .iter()
+                .rev()
+                .filter(visible)
+                .map(|chat| (chat.id, chat.title.clone()))
+                .collect();
+            if chats.is_empty() {
+                ui.label(RichText::new("No archived chats").color(muted()));
+            }
+            self.chat_rows(ui, &chats, 20.0);
+            return;
+        }
+
+        if ui.visuals().dark_mode {
+            section_label(ui, "Projects");
+        }
+        let mut projects = Vec::new();
+        if let Some(path) = &self.session.workspace {
+            projects.push(path.clone());
+        }
+        for chat in &self.session.chats {
+            if let Some(path) = &chat.workspace
+                && !projects.contains(path)
+            {
+                projects.push(path.clone());
+            }
+        }
+
+        for path in projects {
+            if self.session.archived_projects.contains(&path) {
+                continue;
+            }
+            let name = path
+                .file_name()
+                .unwrap_or(path.as_os_str())
+                .to_string_lossy();
+            let project = sidebar_row(ui, &name, false, 8.0, Some(Icon::Folder))
+                .on_hover_text(path.display().to_string());
+            project.context_menu(|ui| {
+                if ui.button("Archive project").clicked() {
+                    self.session.archived_projects.push(path.clone());
+                    ui.close();
+                }
+            });
+            self.project_drag(ui, &project, &path);
+            if project.clicked() {
+                self.session.workspace = Some(path.clone());
+                if let Some(chat) =
+                    self.session
+                        .active()
+                        .filter(|chat| !chat.archived && chat.workspace.as_ref() == Some(&path))
+                        .or_else(|| {
+                            self.session.chats.iter().rev().find(|chat| {
+                                !chat.archived && chat.workspace.as_ref() == Some(&path)
+                            })
+                        })
+                {
+                    self.session.active_chat = Some(chat.id);
+                } else {
+                    self.new_project_chat(path.clone());
+                }
+            }
+            let chats: Vec<_> = self
+                .session
+                .chats
+                .iter()
+                .rev()
+                .filter(visible)
+                .filter(|chat| chat.workspace.as_ref() == Some(&path))
+                .map(|chat| (chat.id, chat.title.clone()))
+                .collect();
+            if chats.is_empty() {
+                ui.horizontal(|ui| {
+                    ui.add_space(32.0);
+                    ui.label(RichText::new("No chats").color(Color32::from_gray(92)));
+                });
+            }
+            self.chat_rows(ui, &chats, 32.0);
+            ui.add_space(7.0);
+        }
+
+        if sidebar_row(ui, "New project", false, 8.0, Some(Icon::Folder)).clicked() {
+            self.pick_workspace(context);
+        }
+        ui.add_space(25.0);
+        section_label(ui, "Recents");
+        let chats: Vec<_> = self
+            .session
+            .chats
+            .iter()
+            .rev()
+            .filter(visible)
+            .map(|chat| (chat.id, chat.title.clone()))
+            .collect();
+        self.chat_rows(ui, &chats, 8.0);
+        if ui.visuals().dark_mode {
+            self.archived_projects_section(ui);
+        }
+    }
+
+    fn archived_projects_section(&mut self, ui: &mut egui::Ui) {
+        egui::CollapsingHeader::new("Archived projects").show(ui, |ui| {
+            if let Some(path) = archived_projects_body(ui, &self.session.archived_projects) {
+                self.session.archived_projects.retain(|item| item != &path);
+            }
+        });
     }
 
     fn chat_rows(&mut self, ui: &mut egui::Ui, chats: &[(Uuid, String)], indent: f32) {
@@ -531,7 +563,7 @@ impl ReDox {
         }
     }
 
-    fn history_section(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
+    fn history_header(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
         ui.horizontal(|ui| {
             ui.label(
                 RichText::new("Codex history")
@@ -545,6 +577,12 @@ impl ReDox {
                 self.refresh_history(context, false);
             }
         });
+    }
+
+    fn history_section(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
+        if ui.visuals().dark_mode {
+            self.history_header(ui, context);
+        }
         if self.search_open
             && self.history_filter.1 != self.search_query
             && ui.small_button("Search Codex history").clicked()
@@ -587,60 +625,63 @@ impl ReDox {
             .session
             .active()
             .and_then(|chat| chat.thread_id.clone());
-        sidebar_list(ui, |ui| {
-            egui::ScrollArea::vertical()
+        let rows = |ui: &mut egui::Ui| {
+            for (id, title, cwd) in entries {
+                let title = if title.is_empty() {
+                    "Codex conversation"
+                } else {
+                    &title
+                };
+                let running = self
+                    .session
+                    .chats
+                    .iter()
+                    .filter(|chat| chat.thread_id.as_deref() == Some(id.as_str()))
+                    .any(|chat| {
+                        chat.messages.iter().any(|message| {
+                            message.status == redox::domain::MessageStatus::Streaming
+                        })
+                    });
+                let (response, archive) = chat_row(
+                    ui,
+                    title,
+                    selected.as_ref() == Some(&id),
+                    8.0,
+                    false,
+                    !running && !self.show_archived,
+                );
+                let response = response.on_hover_text(&cwd);
+                response.context_menu(|ui| {
+                    if ui
+                        .add_enabled(
+                            !running && !self.show_archived,
+                            egui::Button::new("Add to original project"),
+                        )
+                        .clicked()
+                    {
+                        self.add_history_to_project(context, &id);
+                        ui.close();
+                    }
+                    ui.label(&cwd);
+                });
+                if archive.clicked() {
+                    self.archive_history_locally(&id);
+                    continue;
+                }
+                if response.clicked() {
+                    self.open_history(context, id, false);
+                }
+            }
+        };
+        if ui.visuals().dark_mode {
+            super::scroll::ScrollArea::vertical()
                 .id_salt("codex_history_rows")
                 .max_height(240.0)
                 .auto_shrink([false, true])
-                .show(ui, |ui| {
-                    for (id, title, cwd) in entries {
-                        let title = if title.is_empty() {
-                            "Codex conversation"
-                        } else {
-                            &title
-                        };
-                        let running = self
-                            .session
-                            .chats
-                            .iter()
-                            .filter(|chat| chat.thread_id.as_deref() == Some(id.as_str()))
-                            .any(|chat| {
-                                chat.messages.iter().any(|message| {
-                                    message.status == redox::domain::MessageStatus::Streaming
-                                })
-                            });
-                        let (response, archive) = chat_row(
-                            ui,
-                            title,
-                            selected.as_ref() == Some(&id),
-                            8.0,
-                            false,
-                            !running && !self.show_archived,
-                        );
-                        let response = response.on_hover_text(&cwd);
-                        response.context_menu(|ui| {
-                            if ui
-                                .add_enabled(
-                                    !running && !self.show_archived,
-                                    egui::Button::new("Add to original project"),
-                                )
-                                .clicked()
-                            {
-                                self.add_history_to_project(context, &id);
-                                ui.close();
-                            }
-                            ui.label(&cwd);
-                        });
-                        if archive.clicked() {
-                            self.archive_history_locally(&id);
-                            continue;
-                        }
-                        if response.clicked() {
-                            self.open_history(context, id, false);
-                        }
-                    }
-                });
-        });
+                .show(ui, rows);
+        } else {
+            rows(ui);
+        }
         if self.history_loading || self.history_reading.is_some() {
             ui.horizontal(|ui| {
                 ui.spinner();
@@ -787,6 +828,46 @@ fn sidebar_row(
         foreground,
     );
     response.on_hover_text(title)
+}
+
+fn archived_projects_body(
+    ui: &mut egui::Ui,
+    paths: &[std::path::PathBuf],
+) -> Option<std::path::PathBuf> {
+    let mut restore = None;
+    egui::ScrollArea::vertical()
+        .id_salt("archived_projects_list")
+        .max_height(120.0)
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            for path in paths {
+                if archived_project_row(ui, path) {
+                    restore = Some(path.clone());
+                }
+            }
+        });
+    restore
+}
+
+fn archived_project_row(ui: &mut egui::Ui, path: &std::path::Path) -> bool {
+    ui.allocate_ui_with_layout(
+        vec2(ui.available_width(), 24.0),
+        Layout::right_to_left(Align::Center),
+        |ui| {
+            let restore = ui.small_button("Restore");
+            ui.add(
+                egui::Label::new(
+                    path.file_name()
+                        .unwrap_or(path.as_os_str())
+                        .to_string_lossy(),
+                )
+                .truncate(),
+            )
+            .on_hover_text(path.display().to_string());
+            restore.clicked()
+        },
+    )
+    .inner
 }
 
 fn sidebar_list(ui: &mut egui::Ui, contents: impl FnOnce(&mut egui::Ui)) {

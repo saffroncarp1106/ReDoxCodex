@@ -284,7 +284,7 @@ impl ReDox {
     fn settings_content(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
         let classic = self.active_ui.config.layout == win98::ID;
         theme::panel_scroll(ui);
-        egui::ScrollArea::vertical()
+        super::scroll::ScrollArea::vertical()
             .id_salt(("settings_content", self.settings_page as u8))
             .max_height(if classic {
                 (ui.available_height() - 44.0).max(0.0)

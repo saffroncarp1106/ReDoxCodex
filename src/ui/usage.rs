@@ -229,7 +229,7 @@ impl ReDox {
             if info.buckets.is_empty() {
                 ui.label("No quota windows were returned for this account.");
             }
-            egui::ScrollArea::vertical()
+            super::scroll::ScrollArea::vertical()
                 .max_height((context.content_rect().height() - 280.0).clamp(160.0, 450.0))
                 .show(ui, |ui| {
                     for bucket in &info.buckets {

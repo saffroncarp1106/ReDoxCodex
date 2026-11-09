@@ -7,7 +7,7 @@ use super::{conversation::render_transcript, theme, window_frame};
 use crate::app::ReDox;
 
 pub(super) const ID: &str = "win98";
-pub(super) const HEADER_HEIGHT: f32 = 64.0;
+pub(super) const HEADER_HEIGHT: f32 = 46.0;
 pub(super) const NAVY: Color32 = Color32::from_rgb(0, 0, 128);
 const SILVER: Color32 = Color32::from_gray(192);
 const WHITE: Color32 = Color32::WHITE;
@@ -218,6 +218,63 @@ pub(super) fn caption_background(painter: &egui::Painter, rect: Rect) {
     gradient(painter, rect, [NAVY, blue, blue, NAVY]);
 }
 
+fn caption_control(
+    painter: &egui::Painter,
+    rect: Rect,
+    index: usize,
+    maximized: bool,
+    pressed: bool,
+) {
+    painter.rect_filled(rect, 0, SILVER);
+    bevel(painter, rect, pressed);
+    if !pressed {
+        let inner = rect.shrink(1.5);
+        painter.hline(
+            inner.x_range(),
+            inner.bottom(),
+            Stroke::new(1.0, Color32::GRAY),
+        );
+        painter.vline(
+            inner.right(),
+            inner.y_range(),
+            Stroke::new(1.0, Color32::GRAY),
+        );
+    }
+    let origin = rect.min + Vec2::splat(if pressed { 1.0 } else { 0.0 });
+    let pixel = |x, y, w, h| {
+        painter.rect_filled(
+            Rect::from_min_size(origin + vec2(x, y), vec2(w, h)),
+            0,
+            BLACK,
+        );
+    };
+    let window = |x, y| {
+        pixel(x, y, 9.0, 2.0);
+        pixel(x, y + 2.0, 1.0, 6.0);
+        pixel(x + 8.0, y + 2.0, 1.0, 6.0);
+        pixel(x, y + 7.0, 9.0, 1.0);
+    };
+    match index {
+        0 => pixel(4.0, 10.0, 6.0, 2.0),
+        1 if maximized => {
+            window(5.0, 3.0);
+            painter.rect_filled(
+                Rect::from_min_size(origin + vec2(3.0, 5.0), vec2(9.0, 8.0)),
+                0,
+                SILVER,
+            );
+            window(3.0, 5.0);
+        }
+        1 => window(3.0, 3.0),
+        _ => {
+            for step in 0..7 {
+                pixel(4.0 + step as f32, 3.0 + step as f32, 2.0, 1.0);
+                pixel(10.0 - step as f32, 3.0 + step as f32, 2.0, 1.0);
+            }
+        }
+    }
+}
+
 fn mark(painter: &egui::Painter, rect: Rect) {
     let colors = [
         Color32::from_rgb(238, 69, 38),
@@ -296,20 +353,23 @@ impl ReDox {
         egui::TopBottomPanel::top("win98_window_chrome")
             .exact_height(HEADER_HEIGHT)
             .show_separator_line(false)
-            .frame(Frame::NONE.fill(theme::rail()))
+            .frame(Frame::NONE.fill(SILVER).inner_margin(3))
             .show(context, |ui| {
+                bevel(ui.painter(), ui.max_rect().expand(3.0), false);
                 ui.spacing_mut().item_spacing.y = 0.0;
                 self.win98_caption(ui, context, true);
                 Frame::NONE
                     .inner_margin(Margin {
-                        left: 11,
-                        right: 10,
-                        top: 7,
+                        left: 3,
+                        right: 1,
+                        top: 0,
                         bottom: 0,
                     })
                     .show(ui, |ui| {
+                        ui.spacing_mut().interact_size.y = 18.0;
+                        ui.spacing_mut().button_padding = vec2(4.0, 1.0);
                         ui.allocate_ui_with_layout(
-                            vec2(ui.available_width(), 30.0),
+                            vec2(ui.available_width(), 20.0),
                             Layout::left_to_right(Align::Center),
                             |ui| {
                                 self.main_menus(ui, context);
@@ -517,13 +577,13 @@ impl ReDox {
     }
 
     fn win98_caption(&self, ui: &mut Ui, context: &egui::Context, root: bool) {
-        let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 27.0), Sense::hover());
-        let control_width = if root { 77.0 } else { 0.0 };
+        let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::hover());
+        let control_width = if root { 56.0 } else { 0.0 };
         let caption = Rect::from_min_max(rect.min, rect.right_bottom() - vec2(control_width, 0.0));
         caption_background(ui.painter(), rect);
         mark(
             ui.painter(),
-            Rect::from_center_size(rect.left_center() + vec2(14.0, 0.0), vec2(15.0, 13.0)),
+            Rect::from_center_size(rect.left_center() + vec2(9.0, 0.0), vec2(14.0, 12.0)),
         );
         let title = self
             .session
@@ -537,7 +597,7 @@ impl ReDox {
             .painter()
             .layout_no_wrap(title, theme::semibold(13.0), WHITE);
         ui.painter().with_clip_rect(caption).galley(
-            caption.left_center() + vec2(26.0, -galley.size().y / 2.0),
+            caption.left_center() + vec2(20.0, -galley.size().y / 2.0),
             galley,
             WHITE,
         );
@@ -545,26 +605,36 @@ impl ReDox {
             let drag = ui.interact(caption, ui.id().with("win98_drag"), Sense::click_and_drag());
             window_frame::title_drag(context, &drag);
             let maximized = context.input(|input| input.viewport().maximized.unwrap_or(false));
-            for (index, (label, tooltip, command)) in [
-                ("_", "Minimize", egui::ViewportCommand::Minimized(true)),
+            for (index, (tooltip, command)) in [
+                ("Minimize", egui::ViewportCommand::Minimized(true)),
                 (
-                    if maximized { "▣" } else { "□" },
                     "Maximize / restore",
                     egui::ViewportCommand::Maximized(!maximized),
                 ),
-                ("×", "Close ReDox", egui::ViewportCommand::Close),
+                ("Close ReDox", egui::ViewportCommand::Close),
             ]
             .into_iter()
             .enumerate()
             {
-                let left = caption.right() + 2.0 + 24.0 * index as f32;
-                let bounds = Rect::from_min_size(pos2(left, rect.top() + 3.0), vec2(22.0, 21.0));
+                let left = caption.right()
+                    + if index == 2 {
+                        38.0
+                    } else {
+                        2.0 + 17.0 * index as f32
+                    };
+                let bounds = Rect::from_min_size(pos2(left, rect.top() + 3.0), vec2(16.0, 14.0));
                 let response = ui
-                    .put(bounds, egui::Button::new(RichText::new(label).strong()))
+                    .interact(
+                        bounds,
+                        ui.id().with(("caption_control", index)),
+                        Sense::click(),
+                    )
                     .on_hover_text(tooltip);
-                bevel(
+                caption_control(
                     ui.painter(),
-                    response.rect,
+                    bounds,
+                    index,
+                    maximized,
                     response.is_pointer_button_down_on(),
                 );
                 if response.clicked() {
@@ -584,7 +654,7 @@ impl ReDox {
         );
         welcome_monitor(ui.painter(), rect);
         bevel(ui.painter(), rect, true);
-        egui::ScrollArea::vertical()
+        super::scroll::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 Frame::NONE.inner_margin(20).show(ui, |ui| {

@@ -1,7 +1,7 @@
-use eframe::egui::{self, Color32, RichText, ScrollArea, TextFormat, text::LayoutJob};
+use eframe::egui::{self, Color32, RichText, TextFormat, text::LayoutJob};
 use redox::activity::{CommandActivity, FileDiff, TurnActivity};
 
-use super::theme;
+use super::{scroll::ScrollArea, theme};
 
 const ADDED: Color32 = Color32::from_rgb(111, 191, 128);
 const REMOVED: Color32 = Color32::from_rgb(241, 115, 111);

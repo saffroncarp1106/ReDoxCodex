@@ -23,7 +23,7 @@ impl ReDox {
                     return;
                 }
                 theme::panel_scroll(ui);
-                egui::ScrollArea::vertical()
+                super::scroll::ScrollArea::vertical()
                     .id_salt("agent_settings")
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
@@ -336,7 +336,7 @@ impl ReDox {
                         ui.label(RichText::new(&task.model).small().color(theme::muted()));
                         ui.label(&task.task);
                         if !task.output.is_empty() {
-                            egui::ScrollArea::vertical()
+                            super::scroll::ScrollArea::vertical()
                                 .id_salt(("worker_output", &task.id))
                                 .max_height(180.0)
                                 .show(ui, |ui| {

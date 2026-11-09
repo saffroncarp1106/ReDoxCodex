@@ -70,7 +70,7 @@ impl Startup {
             .iter()
             .filter(|selected| **selected)
             .count();
-        egui::ScrollArea::vertical()
+        crate::app::ui::scroll::ScrollArea::vertical()
             .id_salt("cursor_names")
             .max_height(180.0)
             .show(ui, |ui| {
