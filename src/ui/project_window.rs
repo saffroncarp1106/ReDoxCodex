@@ -150,6 +150,9 @@ impl ReDox {
                         let selected = self.session.active_chat.replace(window.chat);
                         let prompt_input_id = self.prompt_input_id.take();
                         std::mem::swap(&mut self.focus_prompt, &mut window.focus_prompt);
+                        let mut input = child.input(|i| i.raw.clone());
+                        self.handle_clipboard_input(child, &mut input);
+                        child.input_mut(|i| i.events = input.events);
                         let renderer = super::renderers::resolve(&self.active_ui.config.layout);
                         (renderer.conversation)(self, child);
                         std::mem::swap(&mut self.focus_prompt, &mut window.focus_prompt);

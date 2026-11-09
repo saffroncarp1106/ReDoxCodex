@@ -478,7 +478,11 @@ impl ReDox {
                 bevel(ui.painter(), rect, false);
                 bevel(ui.painter(), rect.shrink(1.0), false);
                 let inner = rect.shrink(4.0);
-                let mut window = ui.new_child(egui::UiBuilder::new().max_rect(inner));
+                let mut window = ui.new_child(
+                    egui::UiBuilder::new()
+                        .id_salt(("win98_conversation", context.viewport_id()))
+                        .max_rect(inner),
+                );
                 window.set_clip_rect(ui.clip_rect().intersect(inner));
                 if !root {
                     egui::TopBottomPanel::top("win98_branch_header")
@@ -491,6 +495,7 @@ impl ReDox {
                 egui::CentralPanel::default()
                     .frame(Frame::NONE.fill(WHITE))
                     .show_inside(&mut window, |ui| {
+                        ui.set_clip_rect(ui.clip_rect().intersect(ui.max_rect()));
                         if let Some(chat) = self
                             .session
                             .active()

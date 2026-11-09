@@ -1,5 +1,5 @@
 use super::icons::{self, Icon};
-use super::theme::{self, border, muted, rail, sidebar, surface, text};
+use super::theme::{self, border, muted, rail, sidebar, text};
 use super::win98;
 use crate::app::ReDox;
 use eframe::egui::{
@@ -162,13 +162,13 @@ impl ReDox {
 
     pub(in crate::app) fn navigation_rail(&mut self, context: &egui::Context) {
         egui::SidePanel::left("navigation_rail")
-            .exact_width(48.0)
+            .exact_width(52.0)
             .resizable(false)
             .show_separator_line(false)
             .frame(
                 Frame::NONE
                     .fill(rail())
-                    .inner_margin(Margin::symmetric(5, 9)),
+                    .inner_margin(Margin::symmetric(7, 11)),
             )
             .show(context, |ui| {
                 ui.spacing_mut().item_spacing.y = 9.0;
@@ -259,17 +259,26 @@ impl ReDox {
             .frame(Frame::NONE.fill(sidebar()).inner_margin(Margin {
                 left: 11,
                 right: 11,
-                top: 14,
+                top: 11,
                 bottom: 11,
             }))
             .show(context, |ui| {
+                egui::TopBottomPanel::bottom("sidebar_usage_footer")
+                    .resizable(false)
+                    .show_separator_line(true)
+                    .frame(
+                        Frame::NONE
+                            .fill(sidebar())
+                            .inner_margin(Margin::symmetric(8, 12)),
+                    )
+                    .show_inside(ui, |ui| self.sidebar_usage(ui, context));
                 let classic = !ui.visuals().dark_mode;
                 ui.spacing_mut().item_spacing.y = 4.0;
                 if self.history_filter.0 != self.show_archived {
                     self.refresh_history(context, false);
                 }
                 ui.horizontal(|ui| {
-                    ui.add_space(8.0);
+                    ui.add_space(6.0);
                     let mode = &mut self.ui_preferences.codex_mode;
                     egui::ComboBox::from_id_salt("chat_presentation")
                         .width(96.0)
@@ -351,6 +360,22 @@ impl ReDox {
                                 return;
                             }
 
+                            egui::CollapsingHeader::new("Archived projects").show(ui, |ui| {
+                                for path in self.session.archived_projects.clone() {
+                                    ui.horizontal(|ui| {
+                                        ui.label(
+                                            path.file_name()
+                                                .unwrap_or(path.as_os_str())
+                                                .to_string_lossy(),
+                                        );
+                                        if ui.small_button("Restore").clicked() {
+                                            self.session
+                                                .archived_projects
+                                                .retain(|item| item != &path);
+                                        }
+                                    });
+                                }
+                            });
                             section_label(ui, "Projects");
                             let mut projects = Vec::new();
                             if let Some(path) = &self.session.workspace {
@@ -365,6 +390,9 @@ impl ReDox {
                             }
 
                             for path in projects {
+                                if self.session.archived_projects.contains(&path) {
+                                    continue;
+                                }
                                 let name = path
                                     .file_name()
                                     .unwrap_or(path.as_os_str())
@@ -372,6 +400,12 @@ impl ReDox {
                                 let project =
                                     sidebar_row(ui, &name, false, 8.0, Some(Icon::Folder))
                                         .on_hover_text(path.display().to_string());
+                                project.context_menu(|ui| {
+                                    if ui.button("Archive project").clicked() {
+                                        self.session.archived_projects.push(path.clone());
+                                        ui.close();
+                                    }
+                                });
                                 self.project_drag(ui, &project, &path);
                                 if project.clicked() {
                                     self.session.workspace = Some(path.clone());
@@ -583,7 +617,20 @@ impl ReDox {
                             false,
                             !running && !self.show_archived,
                         );
-                        let response = response.on_hover_text(cwd);
+                        let response = response.on_hover_text(&cwd);
+                        response.context_menu(|ui| {
+                            if ui
+                                .add_enabled(
+                                    !running && !self.show_archived,
+                                    egui::Button::new("Add to original project"),
+                                )
+                                .clicked()
+                            {
+                                self.add_history_to_project(context, &id);
+                                ui.close();
+                            }
+                            ui.label(&cwd);
+                        });
                         if archive.clicked() {
                             self.archive_history_locally(&id);
                             continue;
@@ -631,13 +678,14 @@ impl ReDox {
 }
 
 fn rail_button(ui: &mut egui::Ui, icon: Icon, selected: bool, tooltip: &str) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(vec2(36.0, 35.0), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(vec2(38.0, 38.0), Sense::click());
     if selected || response.hovered() {
-        ui.painter().rect_filled(rect, 10, surface());
+        ui.painter()
+            .rect_filled(rect, 10, Color32::from_gray(if selected { 49 } else { 42 }));
     }
     icons::paint(
         ui.painter(),
-        rect.shrink2(vec2(10.0, 9.0)),
+        rect.shrink(9.0),
         icon,
         if selected { Color32::WHITE } else { muted() },
     );

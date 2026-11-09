@@ -12,6 +12,7 @@ pub(super) fn focus_new_prompt(response: &egui::Response, pending: &mut bool, al
 
 impl ReDox {
     pub(in crate::app) fn model_effort_picker(&mut self, ui: &mut egui::Ui, id: &str) {
+        let classic = !ui.visuals().dark_mode;
         let local = self.is_ollama();
         let model = self.selected_model_info().cloned();
         let choice = model
@@ -37,8 +38,9 @@ impl ReDox {
         ui.push_id(id, |ui| {
             ui.add_enabled_ui(self.running.is_none(), |ui| {
                 ui.scope(|ui| {
-                    ui.style_mut().visuals.menu_corner_radius = egui::CornerRadius::same(18);
-                    let button = effort_button(ui, &format!("{name} · {label}"));
+                    ui.style_mut().visuals.menu_corner_radius =
+                        egui::CornerRadius::same(if classic { 0 } else { 18 });
+                    let button = effort_button(ui, &name, &label);
                     if self.capture_path.is_some()
                         && std::env::args().any(|arg| arg == "--effort-preview")
                     {
@@ -48,11 +50,26 @@ impl ReDox {
                         .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
                         .frame(
                             egui::Frame::popup(ui.style())
-                                .corner_radius(18)
+                                .corner_radius(if classic { 0 } else { 18 })
                                 .inner_margin(12),
                         )
                         .show(|ui| {
                             ui.set_width(230.0);
+                            if classic {
+                                let (rect, _) = ui.allocate_exact_size(
+                                    vec2(ui.available_width(), 24.0),
+                                    Sense::hover(),
+                                );
+                                super::win98::caption_background(ui.painter(), rect);
+                                ui.painter().text(
+                                    rect.left_center() + vec2(6.0, 0.0),
+                                    Align2::LEFT_CENTER,
+                                    "Select effort",
+                                    theme::semibold(14.0),
+                                    egui::Color32::WHITE,
+                                );
+                                ui.add_space(8.0);
+                            }
                             ui.spacing_mut().item_spacing = vec2(6.0, 4.0);
                             ui.add_space(2.0);
                             if effort_header(ui, &label, !local && choice.is_some()).clicked()
@@ -171,15 +188,46 @@ impl ReDox {
     }
 }
 
-fn effort_button(ui: &mut egui::Ui, summary: &str) -> egui::Response {
+fn effort_button(ui: &mut egui::Ui, name: &str, effort: &str) -> egui::Response {
     let state = ui.make_persistent_id("effort_button_popup");
     let popup = ui.ctx().data(|data| data.get_temp::<egui::Id>(state));
     let open = popup.is_some_and(|id| egui::Popup::is_id_open(ui.ctx(), id));
-    let response = ui.add_sized(
-        [168.0, 28.0],
-        egui::Button::new(RichText::new(if open { "Select effort" } else { summary }).size(12.0))
-            .truncate(),
+    let mut label = egui::text::LayoutJob::default();
+    label.append(
+        name,
+        0.0,
+        egui::TextFormat {
+            font_id: FontId::proportional(12.0),
+            color: theme::text(),
+            ..Default::default()
+        },
     );
+    label.append(
+        &format!(" {effort}  "),
+        0.0,
+        egui::TextFormat {
+            font_id: FontId::proportional(12.0),
+            color: theme::muted(),
+            ..Default::default()
+        },
+    );
+    let response = ui.add_sized(
+        [ui.available_width().clamp(0.0, 190.0), 28.0],
+        egui::Button::new(label).truncate(),
+    );
+    let caret = egui::Rect::from_center_size(
+        response.rect.right_center() - vec2(8.0, 0.0),
+        vec2(9.0, 9.0),
+    );
+    super::icons::paint(
+        ui.painter(),
+        caret,
+        super::icons::Icon::Chevron,
+        theme::muted(),
+    );
+    if !ui.visuals().dark_mode {
+        super::win98::bevel(ui.painter(), response.rect, open);
+    }
     ui.ctx()
         .data_mut(|data| data.insert_temp(state, egui::Popup::default_response_id(&response)));
     response

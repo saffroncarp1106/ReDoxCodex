@@ -105,3 +105,11 @@ authenticate the updater's GitHub API request.
 Replying to a conversation imported from Codex history creates a separate ReDox chat with the loaded conversation context. The original history remains separate.
 
 Loaded Codex history chats also appear under their project folders. History rows include the project folder name; use Load more chats to discover older conversations.
+
+Right-click a **Codex history** chat and choose **Add to original project** to group it under its saved working folder in Projects. Chats with the same folder appear together.
+
+Project folders can be hidden from the sidebar by right-clicking a project and choosing **Archive project**. Expand **Archived projects** and choose **Restore** to show it again. Archiving preserves the folder on disk and its chats.
+
+The bottom-left sidebar shows account quota percentages when loaded, or Ollama token counts and context usage. Use Usage details / refresh to load or refresh account limits.
+
+Sending a message while a response is running queues a separate follow-up turn. It starts automatically after the current response finishes.

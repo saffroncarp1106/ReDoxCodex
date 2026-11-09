@@ -62,7 +62,7 @@ impl ReDox {
     ) {
         let requested = self.paste_gate.requested(input);
         if !requested
-            || input.viewport_id != egui::ViewportId::ROOT
+            || input.viewport_id != context.viewport_id()
             || self.startup.is_active()
             || self.rename_open
             || (self.settings_open && !self.ui_preferences.floating_windows)
@@ -70,7 +70,10 @@ impl ReDox {
             return;
         }
         let focused = context.memory(|memory| memory.focused());
-        if focused.is_some() && focused != self.prompt_input_id {
+        if context.viewport_id() == egui::ViewportId::ROOT
+            && focused.is_some()
+            && focused != self.prompt_input_id
+        {
             return;
         }
         if self.paste_clipboard_attachments(context) {

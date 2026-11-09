@@ -92,7 +92,18 @@ impl ReDox {
                 if chat.messages.is_empty() {
                     ui.add_space((ui.available_height() * 0.35).max(30.0));
                     ui.vertical_centered(|ui| {
-                        ui.heading(&self.active_ui.config.heading);
+                        let (rect, _) = ui.allocate_exact_size(vec2(52.0, 52.0), Sense::hover());
+                        icons::paint(ui.painter(), rect, Icon::Codex, Color32::from_gray(100));
+                        ui.add_space(24.0);
+                        let heading = chat
+                            .workspace
+                            .as_ref()
+                            .and_then(|path| path.file_name())
+                            .map(|name| {
+                                format!("What should we build in {}?", name.to_string_lossy())
+                            })
+                            .unwrap_or_else(|| "What should we build?".into());
+                        ui.label(RichText::new(heading).size(28.0));
                         ui.add_space(9.0);
                         ui.label(
                             RichText::new("Ask a question or start working on your project.")
@@ -110,19 +121,21 @@ impl ReDox {
         let classic = parent.is_some();
         let mut send = false;
         let mut stop = false;
-        let panel = egui::TopBottomPanel::bottom("composer")
-            .show_separator_line(false)
-            .frame(if classic {
-                Frame::NONE.fill(theme::surface()).inner_margin(8)
-            } else {
-                Frame::NONE.fill(background()).inner_margin(Margin {
-                    left: 16,
-                    right: 10,
-                    top: 12,
-                    bottom: 18,
-                })
-            });
+        let panel =
+            egui::TopBottomPanel::bottom(egui::Id::new(("composer", context.viewport_id())))
+                .show_separator_line(false)
+                .frame(if classic {
+                    Frame::NONE.fill(theme::surface()).inner_margin(8)
+                } else {
+                    Frame::NONE.fill(background()).inner_margin(Margin {
+                        left: 16,
+                        right: 10,
+                        top: 12,
+                        bottom: 18,
+                    })
+                });
         let contents = |ui: &mut egui::Ui| {
+            ui.set_clip_rect(ui.clip_rect().intersect(ui.max_rect()));
             Frame::new()
                 .fill(theme::input_background())
                 .stroke(Stroke::new(
@@ -181,7 +194,7 @@ impl ReDox {
                                                         }
                                                     });
                                                     if ui
-                                                        .small_button("×")
+                                                        .small_button("\u{00d7}")
                                                         .on_hover_text("Remove attachment")
                                                         .clicked()
                                                     {
@@ -196,6 +209,13 @@ impl ReDox {
                         if let Some(id) = remove {
                             chat.attachments.retain(|file| file.id != id);
                         }
+                    }
+                    if self
+                        .session
+                        .active()
+                        .is_some_and(|chat| !chat.attachments.is_empty())
+                    {
+                        ui.add_space(10.0);
                     }
                     if self.picking_files {
                         ui.label(RichText::new("Loading files...").size(12.0).color(muted()));
@@ -508,15 +528,16 @@ fn render_message(
                                     workspace,
                                 );
                             }
-                            ui.label(
-                                RichText::new(format!("▧ {}", file.name()))
-                                    .size(12.0)
-                                    .color(if classic {
-                                        muted()
-                                    } else {
-                                        Color32::from_gray(215)
-                                    }),
-                            );
+                            ui.label(RichText::new(format!("{}", file.name())).size(12.0).color(
+                                if classic {
+                                    muted()
+                                } else {
+                                    Color32::from_gray(215)
+                                },
+                            ));
+                        }
+                        if !message.attachments.is_empty() {
+                            ui.add_space(12.0);
                         }
                         ui.push_id(message.id, |ui| {
                             super::markdown::show_in_workspace(ui, &message.content, workspace)

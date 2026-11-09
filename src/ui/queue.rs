@@ -96,37 +96,45 @@ impl ReDox {
             .show(ui, |ui| {
                 for message in pending() {
                     ui.push_id(message.id, |ui| {
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.small_button("Cancel").clicked() {
-                                cancel = Some(message.id);
-                            }
-                            let preview = if message.content.is_empty() {
-                                message
-                                    .attachments
-                                    .first()
-                                    .map(|file| file.name())
-                                    .unwrap_or_default()
-                            } else {
-                                message.content.chars().take(48).collect()
-                            };
-                            let timing = match chat.send_after.get(&message.id) {
-                                Some(deadline) if *deadline > now => {
-                                    let remaining = *deadline - now;
-                                    ui.ctx().request_repaint_after(
-                                        remaining.min(Duration::from_secs(1)),
-                                    );
-                                    let seconds = remaining.as_secs()
-                                        + u64::from(remaining.subsec_nanos() != 0);
-                                    format!("{:02}:{:02} until send", seconds / 60, seconds % 60)
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(ui.available_width(), ui.spacing().interact_size.y),
+                            egui::Layout::right_to_left(egui::Align::Center),
+                            |ui| {
+                                if ui.small_button("Cancel").clicked() {
+                                    cancel = Some(message.id);
                                 }
-                                _ if self.running.is_some() => {
-                                    "Waiting for current response".into()
-                                }
-                                _ => "Ready to send".into(),
-                            };
-                            ui.label(egui::RichText::new(timing).small());
-                            ui.add(egui::Label::new(preview).truncate());
-                        });
+                                let preview = if message.content.is_empty() {
+                                    message
+                                        .attachments
+                                        .first()
+                                        .map(|file| file.name())
+                                        .unwrap_or_default()
+                                } else {
+                                    message.content.chars().take(48).collect()
+                                };
+                                let timing = match chat.send_after.get(&message.id) {
+                                    Some(deadline) if *deadline > now => {
+                                        let remaining = *deadline - now;
+                                        ui.ctx().request_repaint_after(
+                                            remaining.min(Duration::from_secs(1)),
+                                        );
+                                        let seconds = remaining.as_secs()
+                                            + u64::from(remaining.subsec_nanos() != 0);
+                                        format!(
+                                            "{:02}:{:02} until send",
+                                            seconds / 60,
+                                            seconds % 60
+                                        )
+                                    }
+                                    _ if self.running.is_some() => {
+                                        "Waiting for current response".into()
+                                    }
+                                    _ => "Ready to send".into(),
+                                };
+                                ui.label(egui::RichText::new(timing).small());
+                                ui.add(egui::Label::new(preview).truncate());
+                            },
+                        );
                     });
                 }
             });

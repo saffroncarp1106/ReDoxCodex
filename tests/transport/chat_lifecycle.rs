@@ -135,3 +135,22 @@ fn running_chats_cannot_be_archived_and_archived_blanks_are_not_reused() {
     assert_ne!(session.active_chat, Some(run.chat));
     assert!(session.active().unwrap().is_blank());
 }
+
+#[test]
+fn reloading_original_preserves_project_and_detached_branch() {
+    let mut session = Session::default();
+    let project = Path::new("local-project");
+    session.new_project_chat(project.into());
+    let original = session.active_chat.unwrap();
+    session.active_mut().unwrap().thread_id = Some("server-thread".into());
+    let branch = session.branch_project_chat(project);
+    assert_eq!(
+        crate::history::import(&mut session, page(), false),
+        original
+    );
+    for id in [original, branch] {
+        let chat = session.chats.iter().find(|chat| chat.id == id).unwrap();
+        assert_eq!(chat.workspace.as_deref(), Some(project));
+        assert!(!chat.archived);
+    }
+}

@@ -395,7 +395,7 @@ impl ReDox {
     }
 
     fn send_prompt(&mut self, context: &egui::Context) {
-        if let Some(running) = &self.running {
+        if self.running.is_some() {
             if self.picking_files
                 || self.startup.is_active()
                 || self
@@ -406,17 +406,8 @@ impl ReDox {
                 return;
             }
             match self.session.queue_prompt() {
-                Ok(id) => {
-                    let chat = self.session.active().unwrap();
-                    let message = chat.messages.iter().find(|m| m.id == id).unwrap();
-                    if chat.id == running.id.chat
-                        && chat.provider == Provider::Codex
-                        && running.feedback(codex::Feedback::from_message(message))
-                    {
-                        self.status = "Feedback submitted while the response continues.".into();
-                    } else {
-                        self.status = "Message queued for the next response.".into();
-                    }
+                Ok(_) => {
+                    self.status = "Message queued for the next response.".into();
                     self.attachment_error = None;
                     self.focus_prompt = true;
                 }
@@ -644,6 +635,33 @@ impl ReDox {
                 self.new_chat();
             }
         }
+    }
+
+    fn add_history_to_project(&mut self, context: &egui::Context, thread: &str) {
+        let Some(entry) = self
+            .history
+            .iter()
+            .find(|entry| entry.id == thread)
+            .cloned()
+        else {
+            return;
+        };
+        if let Some(chat) = self
+            .session
+            .chats
+            .iter_mut()
+            .find(|chat| chat.thread_id.as_deref() == Some(thread))
+        {
+            chat.set_workspace(Some(entry.cwd.clone()));
+        } else {
+            let mut chat = redox::domain::Chat::new(Some(entry.cwd.clone()));
+            chat.title = entry.title();
+            chat.thread_id = Some(thread.into());
+            chat.imported_history = true;
+            self.session.chats.push(chat);
+        }
+        self.session.workspace = Some(entry.cwd);
+        self.open_history(context, thread.into(), false);
     }
 
     fn archive_history_locally(&mut self, thread: &str) {

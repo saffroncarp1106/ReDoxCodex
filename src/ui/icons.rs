@@ -6,6 +6,7 @@ pub enum Icon {
     Forward,
     Panel,
     Home,
+    Codex,
     Chat,
     Clock,
     Books,
@@ -109,6 +110,18 @@ pub fn paint(painter: &egui::Painter, rect: Rect, icon: Icon, color: Color32) {
         Icon::Panel => {
             box_at((3., 4.), (21., 20.), 3);
             path(&[(10., 4.), (10., 20.)]);
+        }
+        Icon::Codex => {
+            let points = (0..=96)
+                .map(|index| {
+                    let angle = index as f32 / 96.0 * std::f32::consts::TAU;
+                    let radius = 9.0 + 0.8 * (angle * 6.0).cos();
+                    point(12.0 + radius * angle.cos(), 12.0 + radius * angle.sin())
+                })
+                .collect();
+            painter.add(Shape::line(points, Stroke::new(2.0, color)));
+            path(&[(7., 8.), (10., 12.), (7., 16.)]);
+            path(&[(13., 16.), (18., 16.)]);
         }
         Icon::Home => {
             painter.add(Shape::convex_polygon(

@@ -23,7 +23,11 @@ fn select_effort_keeps_button_and_panel_fixed_after_model_changes() {
                         } else {
                             "A much longer model name · Extra high"
                         };
-                        let button = effort_button(ui, summary);
+                        let button = effort_button(
+                            ui,
+                            summary,
+                            if frame < 3 { "Low" } else { "Extra high" },
+                        );
                         if frame == 0 {
                             egui::Popup::open_id(
                                 context,
@@ -63,7 +67,7 @@ fn select_effort_keeps_button_and_panel_fixed_after_model_changes() {
             },
         );
         if frame >= 2 {
-            assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,egui::Shape::Text(text) if text.galley.text()=="Select effort")));
+            assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,egui::Shape::Text(text) if text.galley.text().contains(if frame < 3 { "Low" } else { "Extra high" }))));
         }
     }
 }

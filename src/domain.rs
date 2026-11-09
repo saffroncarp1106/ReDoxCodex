@@ -248,6 +248,7 @@ impl Chat {
 #[serde(default)]
 pub struct Session {
     pub desktop: crate::desktop::Settings,
+    pub archived_projects: Vec<PathBuf>,
     pub local_archive_overrides: BTreeMap<String, bool>,
     pub ollama: crate::ollama::Settings,
     pub chats: Vec<Chat>,
@@ -265,6 +266,7 @@ impl Default for Session {
     fn default() -> Self {
         Self {
             desktop: crate::desktop::Settings::default(),
+            archived_projects: Vec::new(),
             local_archive_overrides: BTreeMap::new(),
             ollama: crate::ollama::Settings::default(),
             chats: Vec::new(),
