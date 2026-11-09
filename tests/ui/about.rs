@@ -88,3 +88,18 @@ fn extra_clicks_outside_the_unlock_dialog_do_not_dismiss_it() {
         (true, false)
     );
 }
+
+#[test]
+fn discord_preferences_default_off_and_preserve_custom_text() {
+    let old: Preferences = serde_json::from_str("{}").unwrap();
+    assert!(!old.discord_presence.enabled);
+    let mut preferences = old;
+    preferences.discord_presence.enabled = true;
+    preferences.discord_presence.details = "Building ReDox".into();
+    preferences.discord_presence.state = "Enjoying life".into();
+    let restored: Preferences =
+        serde_json::from_str(&serde_json::to_string(&preferences).unwrap()).unwrap();
+    assert!(restored.discord_presence.enabled);
+    assert_eq!(restored.discord_presence.details, "Building ReDox");
+    assert_eq!(restored.discord_presence.state, "Enjoying life");
+}

@@ -11,3 +11,5 @@ pub mod ollama;
 pub mod run;
 pub mod updates;
 pub mod usage;
+
+pub mod discord_presence;

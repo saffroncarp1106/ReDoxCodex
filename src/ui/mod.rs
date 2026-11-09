@@ -49,6 +49,7 @@ pub(super) fn request_animation_frame(context: &egui::Context) {
 #[serde(default)]
 pub(super) struct Preferences {
     pub hide_update_prompts: bool,
+    pub discord_presence: redox::discord_presence::Settings,
     pub codex_mode: bool,
     pub project_glow: project_window::Glow,
     pub text_colors: std::collections::BTreeMap<String, theme::TextColors>,
@@ -67,6 +68,7 @@ impl Default for Preferences {
     fn default() -> Self {
         Self {
             hide_update_prompts: false,
+            discord_presence: redox::discord_presence::Settings::default(),
             codex_mode: false,
             project_glow: project_window::Glow::default(),
             text_colors: std::collections::BTreeMap::new(),

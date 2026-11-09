@@ -113,3 +113,11 @@ Project folders can be hidden from the sidebar by right-clicking a project and c
 The bottom-left sidebar shows account quota percentages when loaded, or Ollama token counts and context usage. Use Usage details / refresh to load or refresh account limits.
 
 Sending a message while a response is running queues a separate follow-up turn. It starts automatically after the current response finishes.
+
+Standalone Discord presence test: with Discord desktop running, use `cargo run --bin presence-test`. Press Enter to clear activity and exit. This test is separate from the ReDox app.
+
+## Discord Rich Presence
+
+In Settings > About, select Enable Presence and customize Details (first line) and State (second line). Changes save automatically, including whether presence is enabled, and publish after a short typing pause. Presence is disabled by default. Blank fields fall back to ReDox / Vibing; each field supports up to 128 characters. The displayed app name is controlled by the registered Discord application.
+
+Discord desktop must be running and signed in. ReDox connects locally using its public Application ID without a bot token or account login. The worker retries unavailable connections every 15 seconds. Disable Presence clears the activity; shutdown attempts to clear it without blocking app exit indefinitely. Only your custom text and elapsed session time are sent, not chat text or project paths. The About page shows connection status. The standalone presence-test program is separate; exit it before testing the integrated presence with the same Application ID.

@@ -40,6 +40,7 @@ enum Event {
 }
 
 pub struct ReDox {
+    presence: redox::discord_presence::Presence,
     updates: redox::updates::Updates,
     project_windows: Vec<ui::project_window::ProjectWindow>,
     focus_prompt: bool,
@@ -198,6 +199,7 @@ impl ReDox {
         let (run_sender, run_receiver) = tokio::sync::mpsc::channel(128);
 
         let mut app = Self {
+            presence: redox::discord_presence::Presence::new(),
             updates: redox::updates::Updates::default(),
             focus_prompt: true,
             prompt_input_id: None,
@@ -1287,6 +1289,7 @@ impl eframe::App for ReDox {
 
         self.draw_ui(context);
         self.dispatch_queued_prompt(context);
+        self.presence.sync(&self.ui_preferences.discord_presence);
         #[cfg(debug_assertions)]
         self.verify_ui_restart(context);
     }

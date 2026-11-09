@@ -58,6 +58,50 @@ impl ReDox {
         if self.about.show_notice {
             self.about.show_notice = !unlock_notice(&context);
         }
+        ui.add_space(12.0);
+        ui.separator();
+        ui.heading("Discord Rich Presence");
+        ui.label(
+            "Share the custom text below on your Discord profile. Discord desktop must be running.",
+        );
+        let settings = &mut self.ui_preferences.discord_presence;
+        let label = if settings.enabled {
+            "Disable Presence"
+        } else {
+            "Enable Presence"
+        };
+        let classic = !ui.visuals().dark_mode;
+        let button = ui.add_sized([140.0, 26.0], egui::Button::new(label));
+        if classic {
+            win98::bevel(
+                ui.painter(),
+                button.rect,
+                button.is_pointer_button_down_on(),
+            );
+        }
+        if button.clicked() {
+            settings.enabled = !settings.enabled;
+        }
+        ui.label("Details (first line)");
+        ui.add(
+            egui::TextEdit::singleline(&mut settings.details)
+                .char_limit(128)
+                .desired_width(f32::INFINITY),
+        );
+        ui.label("State (second line)");
+        ui.add(
+            egui::TextEdit::singleline(&mut settings.state)
+                .char_limit(128)
+                .desired_width(f32::INFINITY),
+        );
+        ui.label(
+            "Changes save automatically and update while enabled. Blank text uses ReDox / Vibing.",
+        );
+        self.presence.sync(settings);
+        ui.label(self.presence.status());
+        if settings.enabled {
+            context.request_repaint_after(std::time::Duration::from_secs(1));
+        }
     }
 }
 

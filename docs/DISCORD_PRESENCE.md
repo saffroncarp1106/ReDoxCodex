@@ -1,6 +1,6 @@
 # Discord Rich Presence research
 
-Researched 2026-11-08. This is a proposed integration, not an implemented feature.
+Researched 2026-11-08. This records the original integration proposal. Basic opt-in custom-text presence is now implemented; see README.md for usage.
 
 ## Recommended approach
 
