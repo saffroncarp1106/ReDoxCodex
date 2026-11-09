@@ -33,6 +33,7 @@ enum Event {
         Result<ConversationPage, String>,
     ),
     Models(Result<ConnectionInfo, String>),
+    Logout(Result<(), String>),
     Workspace(Result<Option<PathBuf>, String>),
     Attachments(uuid::Uuid, Result<Vec<Attachment>, String>),
     Usage(Result<UsageInfo, String>),
@@ -102,6 +103,7 @@ pub struct ReDox {
     login_text: String,
     login_challenge: Option<LoginChallenge>,
     signed_in: bool,
+    logging_out: bool,
     sidebar_visible: bool,
     search_open: bool,
     search_query: String,
@@ -261,6 +263,7 @@ impl ReDox {
             login_text: String::new(),
             login_challenge: None,
             signed_in: false,
+            logging_out: false,
             sidebar_visible,
             search_open: false,
             search_query: String::new(),
@@ -428,6 +431,7 @@ impl ReDox {
     fn can_start_prompt(&self) -> bool {
         !self.startup.is_active()
             && self.running.is_none()
+            && !self.logging_out
             && self.runtime.is_some()
             && !self.picking_files
             && self.history_reading.is_none()
@@ -765,7 +769,7 @@ impl ReDox {
     }
 
     fn refresh_usage(&mut self, context: &egui::Context) {
-        if self.refreshing_usage {
+        if self.refreshing_usage || self.logging_out {
             return;
         }
         let Some(runtime) = &self.runtime else {
@@ -788,7 +792,7 @@ impl ReDox {
     }
 
     fn refresh_models(&mut self, context: &egui::Context) {
-        if self.refreshing {
+        if self.refreshing || self.logging_out {
             return;
         }
 
@@ -811,7 +815,44 @@ impl ReDox {
         }
     }
 
+    fn can_logout(&self) -> bool {
+        self.signed_in
+            && !self.logging_out
+            && !self.refreshing
+            && !self.refreshing_usage
+            && self.running.is_none()
+            && self.runtime.is_some()
+            && !self
+                .login_task
+                .as_ref()
+                .is_some_and(|task| !task.is_finished())
+    }
+
+    fn logout(&mut self, context: &egui::Context) {
+        if !self.can_logout() {
+            return;
+        }
+        let Some(runtime) = &self.runtime else {
+            return;
+        };
+        self.logging_out = true;
+        self.login_text = "Logging out...".into();
+        self.login_challenge = None;
+        self.login_receiver = None;
+        let executable = self.session.codex_path.clone();
+        let sender = self.sender.clone();
+        let context = context.clone();
+        runtime.spawn(async move {
+            let result = codex::logout(&executable).await;
+            let _ = sender.send(Event::Logout(result));
+            context.request_repaint();
+        });
+    }
+
     fn start_login(&mut self, context: &egui::Context) {
+        if self.logging_out {
+            return;
+        }
         let Some(runtime) = &self.runtime else {
             return;
         };
@@ -1154,6 +1195,26 @@ impl ReDox {
                             }
                         }
                         Err(error) => self.attachment_error = Some(error),
+                    }
+                }
+                Event::Logout(result) => {
+                    self.logging_out = false;
+                    match result {
+                        Ok(()) => {
+                            self.signed_in = false;
+                            self.account = "Signed out".into();
+                            self.models.clear();
+                            self.model_details.clear();
+                            self.default_model = None;
+                            self.usage = None;
+                            self.usage_error = None;
+                            self.usage_updated = None;
+                            self.login_text = "Logged out of Codex.".into();
+                            self.status = "Sign in with ChatGPT in Settings to use Codex.".into();
+                        }
+                        Err(error) => {
+                            self.login_text = format!("Could not log out: {error}");
+                        }
                     }
                 }
                 Event::Models(result) => {

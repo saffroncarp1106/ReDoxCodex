@@ -989,6 +989,13 @@ pub enum LoginEvent {
     Failed(String),
 }
 
+pub async fn logout(executable: &str) -> Result<(), String> {
+    let mut rpc = Rpc::connect(executable).await?;
+    let result = rpc.call("account/logout", json!({})).await;
+    rpc.close().await;
+    result.map(|_| ())
+}
+
 pub async fn login(executable: &str, sender: mpsc::Sender<LoginEvent>) -> Result<(), String> {
     let mut rpc = Rpc::connect(executable).await?;
     let result = rpc

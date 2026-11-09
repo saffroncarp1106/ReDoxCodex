@@ -338,7 +338,10 @@ impl ReDox {
         });
         ui.add_space(4.0);
         if ui
-            .add_enabled(!self.refreshing, egui::Button::new("Refresh connection"))
+            .add_enabled(
+                !self.refreshing && !self.logging_out,
+                egui::Button::new("Refresh connection"),
+            )
             .clicked()
         {
             self.refresh_models(context);
@@ -357,10 +360,34 @@ impl ReDox {
             "Sign in with ChatGPT"
         };
         if ui
-            .add_enabled(!signing_in, egui::Button::new(label))
+            .add_enabled(!signing_in && !self.logging_out, egui::Button::new(label))
             .clicked()
         {
             self.start_login(context);
+        }
+        if self.signed_in {
+            ui.add_space(8.0);
+            let label = if self.logging_out {
+                "Logging out..."
+            } else {
+                "Log out"
+            };
+            if ui
+                .add_enabled(self.can_logout(), egui::Button::new(label))
+                .on_disabled_hover_text(
+                    "Wait for the current response, sign-in, or account refresh to finish.",
+                )
+                .clicked()
+            {
+                self.logout(context);
+            }
+            ui.label(
+                RichText::new(
+                    "Logs out of the Codex account shared with your CLI. Saved chats are kept.",
+                )
+                .small()
+                .color(muted()),
+            );
         }
         if !self.login_text.is_empty() {
             ui.label(&self.login_text);

@@ -124,8 +124,8 @@ impl ReDox {
                     ui.menu_button(RichText::new("Help").color(theme::menu_text()), |ui| {
                         ui.label("ReDox · Native Rust client");
                         ui.hyperlink_to(
-                            "Codex app-server documentation",
-                            "https://learn.chatgpt.com/docs/app-server",
+                            "ReDox on GitHub",
+                            "https://github.com/saffroncarp1106/ReDoxCodex",
                         );
                     });
                 });
@@ -278,7 +278,7 @@ impl ReDox {
                     self.refresh_history(context, false);
                 }
                 ui.horizontal(|ui| {
-                    ui.add_space(6.0);
+                    ui.add_space(1.0);
                     let mode = &mut self.ui_preferences.codex_mode;
                     egui::ComboBox::from_id_salt("chat_presentation")
                         .width(96.0)

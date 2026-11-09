@@ -16,6 +16,10 @@ Chat rows have a small **×** button to archive locally. Open **Archived chats**
 
 **New chat** reuses an empty conversation for the same project and provider, and is disabled while that blank chat is selected. Creating or returning to a blank chat focuses the message box in every layout. Drafts and attachments are preserved when starting another chat.
 
+## Account
+
+Open **Settings > Account > Log out** to sign out of the Codex account shared with the CLI. Saved chats and drafts are kept. Logout waits until responses, sign-in, and account refreshes finish; failures leave the displayed account intact. Use **Sign in with ChatGPT** to reconnect.
+
 ## Desktop control (Windows)
 
 Enable **Settings → Workspace & access → Allow Codex to see and control this desktop**. Codex then receives the native `desktop_control` tool for screenshots, window discovery/focus, clicking, dragging, scrolling, Unicode typing, and key chords. Existing chats pick up the tools on their next response while keeping the visible transcript. No desktop skill, Electron runtime, extra desktop server, or API key is required.
