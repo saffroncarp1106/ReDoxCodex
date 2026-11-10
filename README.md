@@ -136,6 +136,6 @@ From this directory, run `cargo run --features design-export --bin export-design
 
 The generated files preserve source geometry and font artwork. Studio can edit the resulting layers, while live application behavior and responsive layout remain in ReDox's renderers.
 
-## Wii interface
+## Wii interface (v0.2.0)
 
 Choose **Wii** from the UI menu for the imported silver-and-white layout, cyan accents, channel shortcuts, glossy controls, player cursors and embedded feedback sounds. Settings > Appearance > Wii controls sounds and motion. The Wii presentation is integrated from the sibling ReDoxWiiUI source; existing application actions and model transports remain shared.
