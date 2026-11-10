@@ -129,3 +129,13 @@ Standalone Discord presence test: with Discord desktop running, use `cargo run -
 In Settings > About, select Enable Presence and customize Details (first line) and State (second line). Changes save automatically, including whether presence is enabled, and publish after a short typing pause. Presence is disabled by default. Blank fields fall back to ReDox / Vibing; each field supports up to 128 characters. The displayed app name is controlled by the registered Discord application.
 
 Discord desktop must be running and signed in. ReDox connects locally using its public Application ID without a bot token or account login. The worker retries unavailable connections every 15 seconds. Disable Presence clears the activity; shutdown attempts to clear it without blocking app exit indefinitely. Only your custom text and elapsed session time are sent, not chat text or project paths. The About page shows connection status. The standalone presence-test program is separate; exit it before testing the integrated presence with the same Application ID.
+
+## Export the existing UIs into Studio
+
+From this directory, run `cargo run --features design-export --bin export-designs`. This uses the same Rust UI renderers and JSON layouts as ReDox, in an offscreen fresh session at 1100 by 900. It exports the four default views into `../ReCreation/skins/redox/` and writes reference images under `target/design-review/`. The exporter requires the sibling ReCreation project for the bounded design schema. It skips model runtime initialization and account/history loading. Rebuild Studio to refresh its embedded asset library after exporting.
+
+The generated files preserve source geometry and font artwork. Studio can edit the resulting layers, while live application behavior and responsive layout remain in ReDox's renderers.
+
+## Wii interface
+
+Choose **Wii** from the UI menu for the imported silver-and-white layout, cyan accents, channel shortcuts, glossy controls, player cursors and embedded feedback sounds. Settings > Appearance > Wii controls sounds and motion. The Wii presentation is integrated from the sibling ReDoxWiiUI source; existing application actions and model transports remain shared.

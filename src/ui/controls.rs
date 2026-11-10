@@ -12,7 +12,7 @@ pub(super) fn focus_new_prompt(response: &egui::Response, pending: &mut bool, al
 
 impl ReDox {
     pub(in crate::app) fn model_effort_picker(&mut self, ui: &mut egui::Ui, id: &str) {
-        let classic = !ui.visuals().dark_mode;
+        let classic = theme::is_classic(ui);
         let local = self.is_ollama();
         let model = self.selected_model_info().cloned();
         let choice = model
@@ -225,7 +225,7 @@ fn effort_button(ui: &mut egui::Ui, name: &str, effort: &str) -> egui::Response 
         super::icons::Icon::Chevron,
         theme::muted(),
     );
-    if !ui.visuals().dark_mode {
+    if theme::is_classic(ui) {
         super::win98::bevel(ui.painter(), response.rect, open);
     }
     ui.ctx()

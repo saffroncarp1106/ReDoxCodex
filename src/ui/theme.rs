@@ -114,7 +114,7 @@ pub fn conversation_scroll() -> egui::style::ScrollStyle {
 }
 
 pub(super) fn panel_scroll(ui: &mut egui::Ui) {
-    if ui.visuals().dark_mode {
+    if !is_classic(ui) {
         ui.spacing_mut().scroll = egui::style::ScrollStyle {
             bar_width: 7.0,
             bar_inner_margin: 5.0,
@@ -127,16 +127,17 @@ pub(super) fn panel_scroll(ui: &mut egui::Ui) {
 
 pub(super) fn card(ui: &mut egui::Ui, contents: impl FnOnce(&mut egui::Ui)) {
     let dark = ui.visuals().dark_mode;
+    let classic = is_classic(ui);
     let panel = egui::Frame::NONE
         .fill(if dark { surface() } else { sidebar() })
         .stroke(egui::Stroke::new(1.0, border()))
-        .corner_radius(if dark { 9 } else { 0 })
+        .corner_radius(if classic { 0 } else { 9 })
         .inner_margin(11)
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             contents(ui);
         });
-    if !dark {
+    if classic {
         super::win98::bevel(ui.painter(), panel.response.rect, false);
     }
 }
@@ -171,7 +172,37 @@ pub(super) fn slider(ui: &mut egui::Ui, slider: egui::Slider<'_>) -> egui::Respo
     .inner
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub(super) enum Controls {
+    #[default]
+    Modern,
+    Classic,
+    Wii,
+}
+
+const CONTROLS_KEY: &str = "ui_controls";
+
+pub(super) fn set_controls(context: &egui::Context, controls: Controls) {
+    context.data_mut(|data| data.insert_temp(egui::Id::new(CONTROLS_KEY), controls));
+}
+
+fn controls(context: &egui::Context) -> Controls {
+    context
+        .data(|data| data.get_temp::<Controls>(egui::Id::new(CONTROLS_KEY)))
+        .unwrap_or_default()
+}
+
+pub(super) fn is_classic(ui: &egui::Ui) -> bool {
+    controls(ui.ctx()) == Controls::Classic
+}
+
+pub(super) fn is_wii(context: &egui::Context) -> bool {
+    controls(context) == Controls::Wii
+}
+
 pub fn apply(ctx: &egui::Context, layout: &str) {
+    set_controls(ctx, Controls::Modern);
+    egui_extras::install_image_loaders(ctx);
     let classic = layout == super::win98::ID;
     let mut fonts = egui::FontDefinitions::default();
     let font_directory = std::env::var_os("SystemRoot")
@@ -261,6 +292,8 @@ pub fn apply(ctx: &egui::Context, layout: &str) {
     });
     if classic {
         super::win98::apply_style(ctx);
+    } else if layout == super::wii::ID {
+        super::wii::apply_style(ctx);
     }
 }
 

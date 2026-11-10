@@ -158,6 +158,10 @@ impl Startup {
         }
     }
 
+    pub fn finish(&mut self) {
+        self.finished = true;
+    }
+
     pub fn is_active(&self) -> bool {
         !self.finished
     }
@@ -285,9 +289,13 @@ impl Startup {
             } else {
                 target.min.lerp(target.max, fraction)
             };
-            let color = parse_color(&config.colors[worker % config.colors.len()])
-                .unwrap_or(Color32::LIGHT_BLUE)
-                .gamma_multiply(1.0 - exit);
+            let color = if super::theme::is_wii(painter.ctx()) {
+                super::wii::player_color(worker)
+            } else {
+                parse_color(&config.colors[worker % config.colors.len()])
+                    .unwrap_or(Color32::LIGHT_BLUE)
+            }
+            .gamma_multiply(1.0 - exit);
             if config.show_trails && movement < 1.0 && time >= task.start && exit == 0.0 {
                 painter.line_segment(
                     [origin.lerp(pointer, 0.72), pointer],
@@ -337,13 +345,28 @@ impl Startup {
                 };
                 pointer = pointer.lerp(pos2(edge, rect.top() - 60.0), ease(exit));
             }
-            cursor(&painter, pointer, config.cursor_size, color, 1.0 - exit);
+            if super::theme::is_wii(painter.ctx()) {
+                super::wii::paint_cursor(
+                    &painter,
+                    pointer,
+                    config.cursor_size * 2.7,
+                    worker,
+                    1.0 - exit,
+                );
+            } else {
+                cursor(&painter, pointer, config.cursor_size, color, 1.0 - exit);
+            }
             if config.show_names {
                 let label = names
                     .get(worker % names.len().max(1))
                     .copied()
                     .unwrap_or("Cursor");
-                let label_pos = pointer + vec2(config.cursor_size * 0.75, config.cursor_size * 0.9);
+                let label_offset = if super::theme::is_wii(painter.ctx()) {
+                    vec2(1.9, 1.8)
+                } else {
+                    vec2(0.75, 0.9)
+                };
+                let label_pos = pointer + label_offset * config.cursor_size;
                 let galley = painter.layout_no_wrap(
                     label.to_owned(),
                     FontId::proportional(11.0),

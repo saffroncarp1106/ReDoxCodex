@@ -585,6 +585,15 @@ impl ReDox {
                 ui.colored_label(Color32::LIGHT_RED, error);
             }
         });
+        if self.active_ui.config.layout == super::wii::ID {
+            settings_group(ui, "Wii", |ui| {
+                ui.checkbox(&mut self.ui_preferences.wii.sounds, "Interface sounds");
+                ui.checkbox(
+                    &mut self.ui_preferences.wii.motion,
+                    "Interface motion and cursor swarm",
+                );
+            });
+        }
         settings_group(ui, "Project folder border glow", |ui| {
             self.ui_preferences.project_glow.settings(ui)
         });
@@ -736,7 +745,7 @@ impl ReDox {
 }
 
 fn heading(ui: &mut egui::Ui, title: &str, description: &str) {
-    if !ui.visuals().dark_mode {
+    if theme::is_classic(ui) {
         ui.label(RichText::new(title).font(theme::semibold(15.0)));
         ui.label(description);
         ui.add_space(8.0);
@@ -749,7 +758,7 @@ fn heading(ui: &mut egui::Ui, title: &str, description: &str) {
 }
 
 fn settings_group(ui: &mut egui::Ui, title: &str, contents: impl FnOnce(&mut egui::Ui)) {
-    if ui.visuals().dark_mode {
+    if !theme::is_classic(ui) {
         theme::card(ui, |ui| {
             ui.label(RichText::new(title).font(theme::semibold(15.0)));
             contents(ui);

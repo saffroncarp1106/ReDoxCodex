@@ -22,6 +22,11 @@ use ui::theme;
 
 const STORAGE_KEY: &str = "redox.session.v1";
 
+#[cfg(feature = "design-export")]
+pub fn export_designs(destination: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+    ui::design_export::export(destination)
+}
+
 enum Event {
     OllamaModels(u64, String, Result<Vec<ollama::Model>, String>),
     UiImport(Result<String, String>),
@@ -120,6 +125,15 @@ impl ReDox {
         capture_path: Option<PathBuf>,
         restart_request: std::sync::Arc<std::sync::Mutex<bool>>,
     ) -> Self {
+        Self::new_internal(context, capture_path, restart_request, None)
+    }
+
+    fn new_internal(
+        context: &eframe::CreationContext<'_>,
+        capture_path: Option<PathBuf>,
+        restart_request: std::sync::Arc<std::sync::Mutex<bool>>,
+        design: Option<&str>,
+    ) -> Self {
         let mut ui_preferences: ui::Preferences = context
             .storage
             .and_then(|storage| eframe::get_value(storage, ui::PREFERENCES_KEY))
@@ -127,8 +141,11 @@ impl ReDox {
         ui_preferences.normalize();
         let ui_folder = ui::packs::root();
         let ui_catalog = ui::packs::discover(&ui_folder);
-        let selected = std::env::args()
-            .find_map(|arg| arg.strip_prefix("--ui=").map(str::to_owned))
+        let selected = design
+            .map(str::to_owned)
+            .or_else(|| {
+                std::env::args().find_map(|arg| arg.strip_prefix("--ui=").map(str::to_owned))
+            })
             .unwrap_or_else(|| ui_preferences.ui.clone());
         let active_ui = ui_catalog
             .packs
@@ -184,14 +201,20 @@ impl ReDox {
             .unwrap_or_default();
 
         session.recover();
-        session.codex_path = codex::resolve_executable(&session.codex_path);
+        if design.is_none() {
+            session.codex_path = codex::resolve_executable(&session.codex_path);
+        }
         if session.active_chat.is_none() {
             session.new_chat();
         }
 
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build();
+        let runtime = if design.is_some() {
+            Err(std::io::Error::other("Offline design export"))
+        } else {
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+        };
         let status = match &runtime {
             Ok(_) => "Ready. Choose a model in settings or start a chat.".into(),
             Err(error) => format!("Background runtime unavailable: {error}"),
@@ -273,9 +296,32 @@ impl ReDox {
             ui_preferences,
             settings_page: ui::SettingsPage::default(),
         };
-        app.refresh_models(&context.egui_ctx);
-        app.refresh_ollama(&context.egui_ctx);
+        if design.is_none() {
+            app.refresh_models(&context.egui_ctx);
+            app.refresh_ollama(&context.egui_ctx);
+        } else {
+            app.startup = ui::startup::Startup::new(Some(
+                serde_json::from_value(serde_json::json!({"enabled":false}))
+                    .expect("Offline startup"),
+            ));
+            app.focus_prompt = false;
+            app.status = "Ready. Choose a model in settings or start a chat.".into();
+        }
         app
+    }
+
+    #[cfg(feature = "design-export")]
+    pub fn design_preview(context: &egui::Context, id: &str) -> Self {
+        Self::new_internal(
+            &eframe::CreationContext::_new_kittest(context.clone()),
+            None,
+            Default::default(),
+            Some(id),
+        )
+    }
+    #[cfg(feature = "design-export")]
+    pub fn render_design(&mut self, context: &egui::Context) {
+        self.draw_ui(context);
     }
 
     fn scan_ui(&mut self) {

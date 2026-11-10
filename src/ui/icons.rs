@@ -36,7 +36,9 @@ pub fn button(ui: &mut Ui, icon: Icon, tooltip: &str) -> Response {
 
 pub(super) fn button_with_sense(ui: &mut Ui, icon: Icon, sense: Sense) -> Response {
     let (rect, response) = ui.allocate_exact_size(vec2(30.0, 30.0), sense);
-    if response.hovered() && ui.is_enabled() {
+    if super::theme::is_wii(ui.ctx()) {
+        super::wii::paint_surface(ui, &response, false);
+    } else if response.hovered() && ui.is_enabled() {
         ui.painter().rect_filled(rect, 7, super::theme::surface());
     }
     let color = if !ui.is_enabled() {

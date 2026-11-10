@@ -70,7 +70,7 @@ impl ReDox {
         } else {
             "Enable Presence"
         };
-        let classic = !ui.visuals().dark_mode;
+        let classic = theme::is_classic(ui);
         let button = ui.add_sized([140.0, 26.0], egui::Button::new(label));
         if classic {
             win98::bevel(

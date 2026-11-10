@@ -159,6 +159,9 @@ impl ReDox {
                         self.prompt_input_id = prompt_input_id;
                         self.session.active_chat = selected;
                     }
+                    if super::theme::is_wii(child) {
+                        super::wii::popup_feedback(child);
+                    }
                     if child.input(|i| !i.events.is_empty()) {
                         child.request_repaint_of(egui::ViewportId::ROOT);
                     }

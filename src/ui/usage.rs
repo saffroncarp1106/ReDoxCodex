@@ -53,7 +53,7 @@ impl ReDox {
         if ui.button("Usage details / refresh").clicked() {
             self.open_usage(context);
         }
-        ui.add_space(8.0);
+        ui.add_space(0.0);
     }
     pub(in crate::app) fn usage_dialog(&mut self, context: &egui::Context) {
         if self.active_ui.config.layout == "win98" && self.usage_open {

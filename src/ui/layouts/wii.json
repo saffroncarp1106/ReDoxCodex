@@ -1,0 +1,19 @@
+{
+  "name": "Wii",
+  "layout": "wii",
+  "heading": "What can I help with?",
+  "placeholder": "Ask anything",
+  "sidebar_default": true,
+  "palette": {
+    "background": "#FAFBFC",
+    "sidebar": "#EDF0F2",
+    "rail": "#F1F3F4",
+    "surface": "#E3E8EF",
+    "input_background": "#FFFFFF",
+    "text": "#383E3F",
+    "menu_text": "#48565D",
+    "muted": "#667780",
+    "border": "#B9C9D3",
+    "accent": "#0085C4"
+  }
+}

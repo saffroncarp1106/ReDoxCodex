@@ -104,6 +104,7 @@ impl Shortcut {
 }
 
 pub(super) fn apply_style(context: &egui::Context) {
+    theme::set_controls(context, theme::Controls::Classic);
     let mut visuals = egui::Visuals::light();
     visuals.panel_fill = theme::sidebar();
     visuals.window_fill = theme::sidebar();

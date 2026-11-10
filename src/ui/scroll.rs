@@ -67,7 +67,7 @@ impl ScrollArea {
         ui: &mut Ui,
         contents: impl FnOnce(&mut Ui) -> R,
     ) -> egui::scroll_area::ScrollAreaOutput<R> {
-        if ui.visuals().dark_mode {
+        if !super::theme::is_classic(ui) {
             return self.area.show(ui, contents);
         }
         let id = ui.make_persistent_id(

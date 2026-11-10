@@ -38,6 +38,9 @@ pub(super) fn native_popup(
                 }
                 egui::CentralPanel::default().show(child, |ui| contents(ui));
             }
+            if super::theme::is_wii(child) {
+                super::wii::popup_feedback(child);
+            }
             if child.input(|input| !input.events.is_empty()) || !*open {
                 child.request_repaint_of(egui::ViewportId::ROOT);
             }

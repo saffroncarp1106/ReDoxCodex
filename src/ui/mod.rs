@@ -11,6 +11,8 @@ mod claude;
 pub(super) mod clipboard;
 mod controls;
 mod conversation;
+#[cfg(feature = "design-export")]
+pub(super) mod design_export;
 pub(super) mod desktop_overlay;
 mod dialogs;
 mod gemini;
@@ -31,6 +33,7 @@ pub(super) mod startup;
 pub(super) mod theme;
 mod updates;
 mod usage;
+pub(super) mod wii;
 mod win98;
 mod window_frame;
 
@@ -63,6 +66,7 @@ pub(super) struct Preferences {
     pub agent_task: String,
     pub floating_windows: bool,
     pub win98_unlocked: bool,
+    pub wii: wii::Settings,
 }
 
 impl Default for Preferences {
@@ -82,6 +86,7 @@ impl Default for Preferences {
             agent_task: String::new(),
             floating_windows: true,
             win98_unlocked: false,
+            wii: wii::Settings::default(),
         }
     }
 }
@@ -120,17 +125,29 @@ impl ReDox {
         if let Some(colors) = self.ui_preferences.text_colors.get(&self.active_ui.id) {
             palette = colors.apply(palette);
         }
+
+        if self.active_ui.config.layout == wii::ID && !self.ui_preferences.wii.motion {
+            self.startup.finish();
+        }
+
         theme::update_colors(context, palette);
         let renderer = renderers::resolve(&self.active_ui.config.layout);
         let windows_desktop = renderer.id == win98::ID;
+
         if windows_desktop {
             self.win98_title_bar(context);
             self.win98_taskbar(context);
+        } else if renderer.id == wii::ID {
+            self.wii_title_bar(context);
         } else {
             self.title_bar(context);
         }
+
+        if renderer.id == wii::ID {
+            (renderer.rail)(self, context);
+        }
         self.agents_panel(context);
-        if !windows_desktop {
+        if !windows_desktop && renderer.id != wii::ID {
             (renderer.rail)(self, context);
         }
         if self.sidebar_visible
@@ -141,23 +158,32 @@ impl ReDox {
         if windows_desktop {
             (renderer.rail)(self, context);
         }
+
         (renderer.conversation)(self, context);
+
         self.rename_dialog(context);
         self.settings(context);
         self.approval_dialog(context);
         self.usage_dialog(context);
+
         self.window_interactions(context);
         self.startup.draw(
             context,
             if windows_desktop {
                 win98::HEADER_HEIGHT
+            } else if renderer.id == wii::ID {
+                48.0
             } else {
                 42.0
             },
         );
+
         self.ui_drop_hint(context);
         self.project_windows(context);
         self.capture_frame(context);
         self.update_prompt(context);
+        if renderer.id == wii::ID {
+            self.wii_feedback(context);
+        }
     }
 }

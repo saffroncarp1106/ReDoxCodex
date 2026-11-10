@@ -119,6 +119,7 @@ impl ReDox {
 
     pub(super) fn composer(&mut self, context: &egui::Context, parent: Option<&mut egui::Ui>) {
         let classic = parent.is_some();
+        let wii = theme::is_wii(context);
         let mut send = false;
         let mut stop = false;
         let panel =
@@ -135,12 +136,15 @@ impl ReDox {
                     })
                 });
         let contents = |ui: &mut egui::Ui| {
+            if wii {
+                super::wii::striped_panel(ui, ui.max_rect().expand2(vec2(16.0, 18.0)));
+            }
             ui.set_clip_rect(ui.clip_rect().intersect(ui.max_rect()));
             Frame::new()
                 .fill(theme::input_background())
                 .stroke(Stroke::new(
                     1.0,
-                    if classic {
+                    if classic || wii {
                         theme::border()
                     } else {
                         Color32::from_gray(59)
@@ -164,7 +168,7 @@ impl ReDox {
                                     ui.spacing_mut().item_spacing.x = 5.0;
                                     for file in row {
                                         Frame::new()
-                                            .fill(if classic {
+                                            .fill(if classic || wii {
                                                 theme::surface()
                                             } else {
                                                 Color32::from_gray(62)
@@ -369,6 +373,29 @@ impl ReDox {
                                     self.model_effort_picker(ui, "composer_model_effort");
                                     return;
                                 }
+                                if wii {
+                                    let response = ui
+                                        .add_enabled_ui(can_send || running, |ui| {
+                                            super::wii::button_with_sense(
+                                                ui,
+                                                if running && !can_send { "Stop" } else { "Send" },
+                                                76.0,
+                                                can_send,
+                                                sense,
+                                            )
+                                        })
+                                        .inner;
+                                    if can_send {
+                                        send |= self.queue_send_control(response);
+                                    } else if running {
+                                        stop |= response.clicked();
+                                    }
+                                    if running && can_send && ui.button("Stop").clicked() {
+                                        stop = true;
+                                    }
+                                    self.model_effort_picker(ui, "composer_model_effort");
+                                    return;
+                                }
                                 let (rect, response) =
                                     ui.allocate_exact_size(vec2(28.0, 28.0), sense);
                                 let fill = if can_send || running {
@@ -505,11 +532,11 @@ fn render_message(
     codex_mode: bool,
 ) {
     if message.role == Role::User {
-        let classic = !ui.visuals().dark_mode;
+        let classic = theme::is_classic(ui);
         let bubble_width = ui.available_width() * 0.72;
         ui.with_layout(Layout::top_down(Align::Max), |ui| {
             Frame::new()
-                .fill(if classic {
+                .fill(if !ui.visuals().dark_mode {
                     Color32::from_rgb(218, 231, 247)
                 } else {
                     Color32::from_rgb(25, 62, 116)

@@ -29,6 +29,12 @@ pub(super) const RENDERERS: &[Renderer] = &[
         conversation: ReDox::claude_conversation,
     },
     Renderer {
+        id: super::wii::ID,
+        config: include_str!("layouts/wii.json"),
+        rail: ReDox::wii_rail,
+        conversation: ReDox::wii_conversation,
+    },
+    Renderer {
         id: super::win98::ID,
         config: include_str!("layouts/win98.json"),
         rail: ReDox::win98_desktop,

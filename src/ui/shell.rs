@@ -57,12 +57,22 @@ impl ReDox {
 
     pub(super) fn main_menus(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
         ui.allocate_ui_with_layout(
-            vec2(184.0, if ui.visuals().dark_mode { 30.0 } else { 20.0 }),
+            vec2(
+                184.0,
+                if !super::theme::is_classic(ui) {
+                    30.0
+                } else {
+                    20.0
+                },
+            ),
             Layout::left_to_right(Align::Center),
             |ui| {
                 egui::MenuBar::new().ui(ui, |ui| {
-                    ui.spacing_mut().item_spacing.x =
-                        if ui.visuals().dark_mode { 10.0 } else { 2.0 };
+                    ui.spacing_mut().item_spacing.x = if !super::theme::is_classic(ui) {
+                        10.0
+                    } else {
+                        2.0
+                    };
                     ui.menu_button(RichText::new("File").color(theme::menu_text()), |ui| {
                         if ui
                             .add_enabled(
@@ -273,7 +283,7 @@ impl ReDox {
                             .inner_margin(Margin::symmetric(8, 12)),
                     )
                     .show_inside(ui, |ui| self.sidebar_usage(ui, context));
-                let classic = !ui.visuals().dark_mode;
+                let classic = theme::is_classic(ui);
                 ui.spacing_mut().item_spacing.y = 4.0;
                 if self.history_filter.0 != self.show_archived {
                     self.refresh_history(context, false);
@@ -396,7 +406,7 @@ impl ReDox {
             chat.archived == archived && chat.title.to_lowercase().contains(&query)
         };
         if self.show_archived {
-            if ui.visuals().dark_mode {
+            if !super::theme::is_classic(ui) {
                 section_label(ui, "Archived");
             }
             let chats: Vec<_> = self
@@ -414,7 +424,7 @@ impl ReDox {
             return;
         }
 
-        if ui.visuals().dark_mode {
+        if !super::theme::is_classic(ui) {
             section_label(ui, "Projects");
         }
         let mut projects = Vec::new();
@@ -496,7 +506,7 @@ impl ReDox {
             .map(|chat| (chat.id, chat.title.clone()))
             .collect();
         self.chat_rows(ui, &chats, 8.0);
-        if ui.visuals().dark_mode {
+        if !super::theme::is_classic(ui) {
             self.archived_projects_section(ui);
         }
     }
@@ -580,7 +590,7 @@ impl ReDox {
     }
 
     fn history_section(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
-        if ui.visuals().dark_mode {
+        if !super::theme::is_classic(ui) {
             self.history_header(ui, context);
         }
         if self.search_open
@@ -673,7 +683,7 @@ impl ReDox {
                 }
             }
         };
-        if ui.visuals().dark_mode {
+        if !super::theme::is_classic(ui) {
             super::scroll::ScrollArea::vertical()
                 .id_salt("codex_history_rows")
                 .max_height(240.0)
@@ -741,7 +751,7 @@ fn chat_row(
     archived: bool,
     enabled: bool,
 ) -> (egui::Response, egui::Response) {
-    let classic = !ui.visuals().dark_mode;
+    let classic = theme::is_classic(ui);
     ui.horizontal(|ui| {
         let row_height = if classic { 22.0 } else { 30.0 };
         let archive_size = if classic { 20.0 } else { 26.0 };
@@ -787,15 +797,24 @@ fn sidebar_row(
     } else {
         Sense::click()
     };
-    let classic = !ui.visuals().dark_mode;
+    let classic = theme::is_classic(ui);
     let row_height = if classic { 22.0 } else { 30.0 };
     let (rect, response) = ui.allocate_exact_size(vec2(ui.available_width(), row_height), sense);
+    let wii = theme::is_wii(ui.ctx());
     let foreground = if classic && selected {
         Color32::WHITE
     } else {
         text()
     };
-    if selected || response.hovered() {
+    if wii {
+        if selected
+            || response.hovered()
+            || response.has_focus()
+            || matches!(icon, Some(Icon::NewChat))
+        {
+            super::wii::paint_surface(ui, &response, selected);
+        }
+    } else if selected || response.hovered() {
         ui.painter().rect_filled(
             rect,
             if classic { 0 } else { 10 },
@@ -871,7 +890,7 @@ fn archived_project_row(ui: &mut egui::Ui, path: &std::path::Path) -> bool {
 }
 
 fn sidebar_list(ui: &mut egui::Ui, contents: impl FnOnce(&mut egui::Ui)) {
-    if ui.visuals().dark_mode {
+    if !super::theme::is_classic(ui) {
         contents(ui);
     } else {
         win98::list_box(ui, |ui| {
