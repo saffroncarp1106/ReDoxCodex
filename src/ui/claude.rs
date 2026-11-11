@@ -38,7 +38,10 @@ impl ReDox {
                     {
                         match icon {
                             Icon::NewChat => {
-                                self.new_chat();
+                                self.dispatch_ui_action(
+                                    redox_studio::actions::UiAction::NewChat,
+                                    context,
+                                );
                             }
                             Icon::Search => {
                                 self.sidebar_visible = true;
@@ -236,7 +239,10 @@ impl ReDox {
                         ui.separator();
                     }
                     if ui.button("Open project folder…").clicked() {
-                        self.pick_workspace(context);
+                        self.dispatch_ui_action(
+                            redox_studio::actions::UiAction::OpenProject,
+                            context,
+                        );
                         ui.close();
                     }
                 });
@@ -305,7 +311,7 @@ impl ReDox {
             ui.label(RichText::new(&self.status).small().color(theme::muted()));
         }
         if send {
-            self.send_prompt(context);
+            self.dispatch_ui_action(redox_studio::actions::UiAction::Send, context);
         }
     }
 
@@ -357,13 +363,13 @@ impl ReDox {
     fn claude_add_menu(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
         ui.menu_button(RichText::new("+").size(22.0).color(theme::text()), |ui| {
             if ui.button("Add files").clicked() {
-                self.pick_files(context);
+                self.dispatch_ui_action(redox_studio::actions::UiAction::AddFiles, context);
                 ui.close();
             }
             if context.viewport_id() == egui::ViewportId::ROOT
                 && ui.button("Open project folder").clicked()
             {
-                self.pick_workspace(context);
+                self.dispatch_ui_action(redox_studio::actions::UiAction::OpenProject, context);
                 ui.close();
             }
         });
@@ -372,7 +378,7 @@ impl ReDox {
     fn claude_send_control(&mut self, ui: &mut egui::Ui) -> bool {
         if self.active_chat_running() {
             if icons::button(ui, Icon::Close, "Stop response").clicked() {
-                self.stop_response();
+                self.dispatch_ui_action(redox_studio::actions::UiAction::Stop, ui.ctx());
             }
         }
         let ready = self.session.active().is_some_and(|chat| {
@@ -399,6 +405,12 @@ impl ReDox {
                 ui.painter()
                     .add(egui::Shape::line(line, Stroke::new(1.5, color)));
             }
+            #[cfg(feature = "design-export")]
+            super::design_export::record(
+                ui.ctx(),
+                response.rect,
+                redox_studio::actions::UiAction::Send,
+            );
             ready && self.queue_send_control(response)
         })
         .inner

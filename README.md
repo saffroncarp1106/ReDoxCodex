@@ -4,9 +4,19 @@ A front-end rewrite for rust because 1.2g of ram for a basic ui window is ridicu
 Redox: A reaction where both reduction and oxidation occurs. The process of Oxidation, is the lose of an electron, the project was aimed to rewrite Codex to no longer use Electron and instead Rust, ironically when Iron oxidizes, it Rusts. Technically a redox reaction needs a reduction, which we have by reducing ram consumption by 10x, so use the free memory for an Ollama model!
 
 ## Run
+Version **0.2.1** includes resource limits, compact percentage controls, thin Settings scrollbars, and the Settings popup layout fixes. Wii uses its existing white and light-gray palette. The Studio runtime library is bundled under `src/ui/studio_runtime` so ordinary builds work from this repository alone.
+
+Windows resource budgets are available in **Settings > Resource limiter**. Enable the limiter, choose CPU and RAM percentages, enter your connection's upload capacity in Mbps, choose an upload percentage, and click **Apply resource budgets**. Applied settings persist across restarts. The limiter starts disabled with proposed budgets of 50% and a user-editable 20 Mbps upload reference.
+
+Windows Job Objects enforce a shared CPU hard cap, committed-memory ceiling derived from installed physical RAM, and outgoing-network rate limit for ReDox and its subsequently launched descendants, including its Codex app-server connection and assistant shell commands. Limits apply throughout the app session while enabled. Reaching the memory ceiling can cause task or app allocation failures. CPU percentages follow Windows job scheduling intervals and can show brief sampling spikes. The page reports each enforcement operation separately, including OS failures and potentially retained previous limits. Clearing **Enable resource budgets** and applying removes these caps.
+
+Coverage currently includes outgoing Wi-Fi and Ethernet traffic. GPU percentage, disk bandwidth, and incoming-network throttling remain unavailable. Microsoft's [disk-rate API documentation](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/ns-jobapi2-jobobject_io_rate_control_information) marks it unsupported on Windows 10 1607 and newer. The [network job API](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_net_rate_control_information) covers outgoing traffic. External Ollama servers, pre-existing independent tunnels, other applications, and cloud-side computation operate outside ReDox's process tree. Upload percentages use the capacity entered in settings. Enforcement requires Windows, and incompatible parent job restrictions can prevent attachment or individual limits.
+
 On Windows, open `Launch ReDox.cmd` to rebuild changed project files and then start the updated release executable. Cargo skips unchanged work. Use `Launch ReDox.cmd --debug` for a debug build. A failed build stops the launcher instead of starting an older executable. This uses local source files and does not download source updates. Rust and the Visual Studio C++ build tools are required.
 
 On macOS or Linux, with Rust and the native platform build dependencies installed, run `cargo run --locked --bin redox`.
+
+For faster edit/build cycles, use `Launch ReDox.cmd --debug` or `cargo build --locked --bin redox`. Development builds retain backtrace line information with reduced debug symbols. For native debugging with local variables, set `CARGO_PROFILE_DEV_DEBUG=2` before building; changing this setting rebuilds affected artifacts. See [build speed measurements](docs/BUILD_SPEED.md) for the reproducible benchmark and tradeoffs.
 
 After you discover **Windows 98**, choose it from the **UI** menu for the teal desktop, classic chat window, and Start taskbar. **My Chats**, **Open Project**, and **Ollama Agents** open their corresponding ReDox tools.
 
@@ -99,8 +109,8 @@ folder must be writable. Chats and settings remain in application storage.
 Updates wait until the current response finishes before closing the application.
 Other platforms can use **View release and download**.
 
-The launcher uses existing executables; run `Build Release.bat` explicitly after
-source changes. Release tags must use `vMAJOR.MINOR.PATCH` or `MAJOR.MINOR.PATCH`.
+The launcher rebuilds changed project files before starting the executable.
+Use `Build Release.bat` to build without launching. Release tags must use `vMAJOR.MINOR.PATCH` or `MAJOR.MINOR.PATCH`.
 A test tag must include the compiled Windows asset to support installation.
 
 The default update repository is `saffroncarp1106/ReDoxCodex`.
@@ -132,10 +142,28 @@ Discord desktop must be running and signed in. ReDox connects locally using its 
 
 ## Export the existing UIs into Studio
 
-From this directory, run `cargo run --features design-export --bin export-designs`. This uses the same Rust UI renderers and JSON layouts as ReDox, in an offscreen fresh session at 1100 by 900. It exports the four default views into `../ReCreation/skins/redox/` and writes reference images under `target/design-review/`. The exporter requires the sibling ReCreation project for the bounded design schema. It skips model runtime initialization and account/history loading. Rebuild Studio to refresh its embedded asset library after exporting.
+From this directory, run `cargo run --locked --features design-export --bin export-designs`. This uses Redox's actual renderers in an offscreen session at 1100 × 900 to export welcome, conversation and eight Settings scenes for each of the five themes into `../ReCreation/skins/redox/scenes/`, plus the five main originals. It skips model transport and stored account/history. Set `REDOX_EXPORT_REVIEW=1` to also generate PNGs under `target/design-review`. Rebuild Studio after refreshing embedded main templates.
 
 The generated files preserve source geometry and font artwork. Studio can edit the resulting layers, while live application behavior and responsive layout remain in ReDox's renderers.
 
 ## Wii interface (v0.2.0)
 
 Choose **Wii** from the UI menu for the imported silver-and-white layout, cyan accents, channel shortcuts, glossy controls, player cursors and embedded feedback sounds. Settings > Appearance > Wii controls sounds and motion. The Wii presentation is integrated from the sibling ReDoxWiiUI source; existing application actions and model transports remain shared.
+
+### Studio-authored controls
+
+ReDox can load a Studio `.redoxskin` as functional controls in every theme. Use Settings > Appearance > **Load Studio controls**, or drag a `.redoxskin` file onto ReDox. Studio layers support typed `ui_script` calls for history, projects, chats, send/stop, agents and settings, plus native menu/model/effort/composer controls. See [Studio integration](docs/STUDIO_INTEGRATION.md) for the example, authoring contract, MCP workflow and remaining shell migration.
+
+Studio now has a live dummy-chat playground and twelve source-rendered scenes per theme, including all eight Settings pages. Saved Studio controls automatically reload in Redox. Refresh the source scenes with `cargo run --locked --features design-export --bin export-designs`. See [Live customizer](../ReCreation/docs/LIVE_CUSTOMIZER.md).
+
+Studio control menus and model/effort choices now open from the authored skin controls, with selected values rendered in the skin. Composer text uses the skin's typography and padding.
+
+Studio composers now share Enter-to-send, Shift+Enter newline and IME confirmation behavior with Redox. Source exports preserve interaction regions for menu bars, Settings tabs and the `model.effort` picker. Set `REDOX_EXPORT_REVIEW=1` when exporting to also generate PNG review references.
+
+
+The `conversation` Studio component now renders the active chat in a bounded scrolling panel. The bundled **Wii live workspace** example pairs it with a composer, menu, combined model/effort picker and reusable action buttons. Studio can search controls by readable name or script ID, and convert captured artwork to editable styling with Undo support.
+
+Studio source export now includes Agents and My chats panel states in every theme. Windows 98 shortcut hit areas and behavior use the same action dispatcher as Studio controls. The Studio playground fits the whole scene to its window automatically.
+
+
+Studio text now uses freshly laid-out fonts at the current zoom/DPI, including unedited source labels. The source exporter records native typeface, text origin, wrapping and truncation metadata; the runtime registers those local Windows fonts for matching typography.

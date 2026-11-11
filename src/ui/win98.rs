@@ -39,11 +39,16 @@ impl Shortcut {
     }
 
     fn activate(self, app: &mut ReDox, context: &egui::Context) {
+        app.dispatch_ui_action(self.action(), context);
+    }
+
+    fn action(self) -> redox_studio::actions::UiAction {
+        use redox_studio::actions::UiAction;
         match self {
-            Self::Chats => app.sidebar_visible = !app.sidebar_visible,
-            Self::Project => app.pick_workspace(context),
-            Self::Agents => app.ui_preferences.agents_open = !app.ui_preferences.agents_open,
-            Self::Settings => app.settings_open = true,
+            Self::Chats => UiAction::Sidebar,
+            Self::Project => UiAction::OpenProject,
+            Self::Agents => UiAction::OllamaAgent,
+            Self::Settings => UiAction::Settings,
         }
     }
 
@@ -406,7 +411,10 @@ impl ReDox {
                                 .add_enabled(self.can_new_chat(), egui::Button::new("New chat"))
                                 .clicked()
                             {
-                                self.new_chat();
+                                self.dispatch_ui_action(
+                                    redox_studio::actions::UiAction::NewChat,
+                                    context,
+                                );
                                 ui.close();
                             }
                             for shortcut in SHORTCUTS {
@@ -434,13 +442,13 @@ impl ReDox {
                         .on_hover_text("Previous chat")
                         .clicked()
                     {
-                        self.navigate(-1);
+                        self.dispatch_ui_action(redox_studio::actions::UiAction::Previous, context);
                     }
                     if button(ui, "▶", vec2(25.0, 23.0))
                         .on_hover_text("Next chat")
                         .clicked()
                     {
-                        self.navigate(1);
+                        self.dispatch_ui_action(redox_studio::actions::UiAction::Next, context);
                     }
                     ui.separator();
                     let task = button(ui, RichText::new("      ReDox").strong(), vec2(123.0, 23.0));
@@ -489,6 +497,8 @@ impl ReDox {
                     response.widget_info(|| {
                         egui::WidgetInfo::labeled(egui::WidgetType::Button, true, shortcut.label())
                     });
+                    #[cfg(feature = "design-export")]
+                    super::design_export::record(context, rect, shortcut.action());
                     if response.hovered() || response.has_focus() {
                         ui.painter().rect_filled(rect.shrink(2.0), 0, NAVY);
                     }

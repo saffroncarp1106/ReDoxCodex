@@ -287,13 +287,19 @@ impl ReDox {
                                     )
                                     .clicked()
                                 {
-                                    self.pick_files(context);
+                                    self.dispatch_ui_action(
+                                        redox_studio::actions::UiAction::AddFiles,
+                                        context,
+                                    );
                                     ui.close();
                                 }
                                 if context.viewport_id() == egui::ViewportId::ROOT
                                     && ui.button("Open project folder").clicked()
                                 {
-                                    self.pick_workspace(context);
+                                    self.dispatch_ui_action(
+                                        redox_studio::actions::UiAction::OpenProject,
+                                        context,
+                                    );
                                     ui.close();
                                 }
                             });
@@ -467,10 +473,10 @@ impl ReDox {
         }
 
         if send {
-            self.send_prompt(context);
+            self.dispatch_ui_action(redox_studio::actions::UiAction::Send, context);
         }
         if stop {
-            self.stop_response();
+            self.dispatch_ui_action(redox_studio::actions::UiAction::Stop, context);
         }
     }
 }

@@ -1,0 +1,3 @@
+This directory bundles the Studio library source used by ReDox v0.2.1 so a repository checkout can build independently. The snapshot comes from the local ReCreation project and includes its document model, renderer, actions, original templates, and referenced library tests. The bundled manifest and source omit the MCP module and schema derives. The standalone application and MCP server are maintained in ReCreation.
+
+Refresh this snapshot when changing the shared Studio document or action contract. Source scene exports remain in ReCreation's `skins/redox/scenes` folder and are produced by ReDox's design exporter.

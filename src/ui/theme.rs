@@ -56,6 +56,21 @@ thread_local! { static PALETTE: std::cell::Cell<Palette> = std::cell::Cell::new(
 pub fn set_palette(palette: Palette) {
     PALETTE.set(palette);
 }
+pub(super) fn palette() -> Palette {
+    PALETTE.get()
+}
+
+pub(super) fn with_palette<R>(palette: Palette, content: impl FnOnce() -> R) -> R {
+    struct Restore(Palette);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            PALETTE.set(self.0);
+        }
+    }
+    let _restore = Restore(PALETTE.replace(palette));
+    content()
+}
+
 pub fn background() -> egui::Color32 {
     PALETTE.get().background
 }
@@ -246,6 +261,7 @@ pub fn apply(ctx: &egui::Context, layout: &str) {
     fonts
         .families
         .insert(egui::FontFamily::Name("serif".into()), serif_fonts);
+    redox_studio::presentation::typography::register(&mut fonts);
     ctx.set_fonts(fonts);
 
     let mut visuals = egui::Visuals::dark();

@@ -36,7 +36,10 @@ impl ReDox {
                     {
                         match icon {
                             Icon::NewChat => {
-                                self.new_chat();
+                                self.dispatch_ui_action(
+                                    redox_studio::actions::UiAction::NewChat,
+                                    context,
+                                );
                             }
                             Icon::Search => {
                                 self.sidebar_visible = true;
@@ -196,13 +199,19 @@ impl ReDox {
                 ui.horizontal(|ui| {
                     ui.menu_button(RichText::new("+").size(27.0), |ui| {
                         if ui.button("Add files").clicked() {
-                            self.pick_files(context);
+                            self.dispatch_ui_action(
+                                redox_studio::actions::UiAction::AddFiles,
+                                context,
+                            );
                             ui.close();
                         }
                         if context.viewport_id() == egui::ViewportId::ROOT
                             && ui.button("Open project folder").clicked()
                         {
-                            self.pick_workspace(context);
+                            self.dispatch_ui_action(
+                                redox_studio::actions::UiAction::OpenProject,
+                                context,
+                            );
                             ui.close();
                         }
                     });
@@ -245,7 +254,7 @@ impl ReDox {
                     }
                     if self.active_chat_running() {
                         if icons::button(ui, Icon::Close, "Stop response").clicked() {
-                            self.stop_response();
+                            self.dispatch_ui_action(redox_studio::actions::UiAction::Stop, context);
                         }
                     }
                     {
@@ -344,7 +353,7 @@ impl ReDox {
             ui.label(RichText::new(&self.status).small().color(theme::muted()));
         }
         if send {
-            self.send_prompt(context);
+            self.dispatch_ui_action(redox_studio::actions::UiAction::Send, context);
         }
     }
 }

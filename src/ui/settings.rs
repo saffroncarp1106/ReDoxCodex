@@ -8,10 +8,11 @@ use crate::app::ReDox;
 use redox::codex;
 use redox::domain::{DEFAULT_MODEL, Mode};
 
-const SETTINGS_PAGES: [(SettingsPage, &str); 8] = [
+const SETTINGS_PAGES: [(SettingsPage, &str); 9] = [
     (SettingsPage::Account, "Account"),
     (SettingsPage::Models, "Models & reasoning"),
     (SettingsPage::Workspace, "Workspace & access"),
+    (SettingsPage::Resources, "Resource limiter"),
     (SettingsPage::Appearance, "Appearance"),
     (SettingsPage::Cursors, "Cursor animation"),
     (SettingsPage::Advanced, "Advanced"),
@@ -23,6 +24,7 @@ const SETTINGS_ICONS: [Icon; SETTINGS_PAGES.len()] = [
     Icon::Home,
     Icon::Bolt,
     Icon::Shield,
+    Icon::Bolt,
     Icon::Grid,
     Icon::Reticle,
     Icon::Settings,
@@ -151,7 +153,7 @@ impl ReDox {
                         self.settings_open = false;
                     } else {
                         egui::CentralPanel::default()
-                            .frame(Frame::NONE)
+                            .frame(Frame::NONE.fill(theme::sidebar()))
                             .show(child, |ui| {
                                 self.win98_property_sheet(ui, true);
                             });
@@ -178,6 +180,8 @@ impl ReDox {
 
     fn win98_property_sheet(&mut self, ui: &mut egui::Ui, floating: bool) {
         let context = ui.ctx().clone();
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+        ui.set_clip_rect(ui.clip_rect().intersect(ui.max_rect()));
         let shell = Frame::NONE
             .fill(theme::sidebar())
             .inner_margin(4)
@@ -218,18 +222,13 @@ impl ReDox {
                 Frame::NONE.inner_margin(8).show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 0.0;
                     let mut selected_tab = None;
+                    let labels: [&str; SETTINGS_PAGES.len()] = [
+                        "Account", "Models", "Workspace", "Resources", "Appearance", "Cursors",
+                        "Advanced", "Updates", "About",
+                    ];
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = vec2(1.0, 2.0);
-                        for ((page, tooltip), label) in SETTINGS_PAGES.into_iter().zip([
-                            "Account",
-                            "Models",
-                            "Workspace",
-                            "Appearance",
-                            "Cursors",
-                            "Advanced",
-                            "Updates",
-                            "About",
-                        ]) {
+                        for ((page, tooltip), label) in SETTINGS_PAGES.into_iter().zip(labels) {
                             let selected = self.settings_page == page;
                             let response = ui
                                 .add(
@@ -270,10 +269,17 @@ impl ReDox {
                         if win98::button(ui, "OK", vec2(78.0, 25.0)).clicked() {
                             self.settings_open = false;
                         }
-                        ui.label(
-                            RichText::new("Changes apply as you make them.")
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(if self.settings_page == SettingsPage::Resources {
+                                    "Use Apply resource budgets to save these changes."
+                                } else {
+                                    "Changes apply as you make them."
+                                })
                                 .small()
                                 .color(muted()),
+                            )
+                            .wrap(),
                         );
                     });
                 });
@@ -283,11 +289,19 @@ impl ReDox {
 
     fn settings_content(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
         let classic = self.active_ui.config.layout == win98::ID;
-        theme::panel_scroll(ui);
-        super::scroll::ScrollArea::vertical()
+        ui.spacing_mut().scroll = egui::style::ScrollStyle {
+            bar_width: 4.0,
+            bar_inner_margin: 3.0,
+            bar_outer_margin: 0.0,
+            handle_min_length: 24.0,
+            foreground_color: true,
+            ..egui::style::ScrollStyle::solid()
+        };
+        egui::ScrollArea::vertical()
             .id_salt(("settings_content", self.settings_page as u8))
+            .max_width(ui.available_width())
             .max_height(if classic {
-                (ui.available_height() - 44.0).max(0.0)
+                (ui.available_height() - 64.0).max(0.0)
             } else {
                 (ui.available_height() - 6.0).max(0.0)
             })
@@ -312,6 +326,7 @@ impl ReDox {
                             }
                         }
                         SettingsPage::Advanced => self.advanced_settings(ui, context),
+                        SettingsPage::Resources => self.resource_settings(ui),
                         SettingsPage::Updates => self.updates_settings(ui),
                         SettingsPage::About => self.about_settings(ui),
                     }
@@ -771,6 +786,10 @@ fn settings_group(ui: &mut egui::Ui, title: &str, contents: impl FnOnce(&mut egu
 fn settings_tab(ui: &mut egui::Ui, label: &str, icon: Icon, selected: bool) -> egui::Response {
     let (rect, response) =
         ui.allocate_exact_size(vec2(ui.available_width(), 35.0), egui::Sense::click());
+    #[cfg(feature = "design-export")]
+    if let Some(action) = redox_studio::actions::UiAction::from_label(label) {
+        super::design_export::record(ui.ctx(), rect, action);
+    }
     response.widget_info(|| {
         egui::WidgetInfo::selected(
             egui::WidgetType::SelectableLabel,

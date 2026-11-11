@@ -1,0 +1,836 @@
+{
+  "version": 2,
+  "name": "Wii live workspace",
+  "author": "Creator",
+  "license": "CC0-1.0",
+  "pages": [
+    {
+      "name": "Page 1",
+      "background": [
+        30,
+        30,
+        33
+      ],
+      "nodes": [
+        {
+          "id": 1,
+          "parent": null,
+          "kind": "Frame",
+          "name": "Wii live workspace",
+          "x": 0.0,
+          "y": 0.0,
+          "width": 1100.0,
+          "height": 900.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            242,
+            247,
+            250,
+            255
+          ],
+          "stroke": [
+            160,
+            168,
+            184,
+            255
+          ],
+          "stroke_width": 0.0,
+          "radius": 0.0,
+          "opacity": 1.0,
+          "text": "",
+          "text_color": [
+            32,
+            37,
+            49,
+            255
+          ],
+          "font_size": 14.0,
+          "font": "Sans",
+          "text_align": "Left",
+          "clip_content": true,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "id": 2,
+          "parent": 1,
+          "kind": "Frame",
+          "name": "Navigation",
+          "x": 0.0,
+          "y": 0.0,
+          "width": 238.0,
+          "height": 900.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            225,
+            237,
+            244,
+            255
+          ],
+          "stroke": [
+            160,
+            168,
+            184,
+            255
+          ],
+          "stroke_width": 0.0,
+          "radius": 0.0,
+          "opacity": 1.0,
+          "text": "",
+          "text_color": [
+            32,
+            37,
+            49,
+            255
+          ],
+          "font_size": 14.0,
+          "font": "Sans",
+          "text_align": "Left",
+          "clip_content": true,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "id": 3,
+          "parent": 2,
+          "kind": "Text",
+          "name": "ReDox",
+          "x": 24.0,
+          "y": 28.0,
+          "width": 190.0,
+          "height": 38.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "stroke": [
+            160,
+            168,
+            184,
+            255
+          ],
+          "stroke_width": 0.0,
+          "radius": 0.0,
+          "opacity": 1.0,
+          "text": "ReDox",
+          "text_color": [
+            50,
+            65,
+            77,
+            255
+          ],
+          "font_size": 30.0,
+          "font": "Sans",
+          "text_align": "Left",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "id": 4,
+          "parent": 2,
+          "kind": "Text",
+          "name": "Your workspace",
+          "x": 26.0,
+          "y": 74.0,
+          "width": 190.0,
+          "height": 22.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "stroke": [
+            160,
+            168,
+            184,
+            255
+          ],
+          "stroke_width": 0.0,
+          "radius": 0.0,
+          "opacity": 1.0,
+          "text": "Your workspace",
+          "text_color": [
+            50,
+            65,
+            77,
+            255
+          ],
+          "font_size": 14.0,
+          "font": "Sans",
+          "text_align": "Left",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "ui_script": [
+            "menus"
+          ],
+          "id": 5,
+          "parent": 2,
+          "kind": "Button",
+          "name": "Menu",
+          "x": 24.0,
+          "y": 126.0,
+          "width": 190.0,
+          "height": 44.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            248,
+            252,
+            254,
+            255
+          ],
+          "stroke": [
+            110,
+            179,
+            211,
+            255
+          ],
+          "stroke_width": 1.5,
+          "radius": 12.0,
+          "opacity": 1.0,
+          "text": "Menu",
+          "text_color": [
+            45,
+            90,
+            116,
+            255
+          ],
+          "font_size": 16.0,
+          "font": "Sans",
+          "text_align": "Center",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "ui_script": [
+            "chat.new"
+          ],
+          "id": 6,
+          "parent": 2,
+          "kind": "Button",
+          "name": "New chat",
+          "x": 24.0,
+          "y": 184.0,
+          "width": 190.0,
+          "height": 44.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            248,
+            252,
+            254,
+            255
+          ],
+          "stroke": [
+            110,
+            179,
+            211,
+            255
+          ],
+          "stroke_width": 1.5,
+          "radius": 12.0,
+          "opacity": 1.0,
+          "text": "New chat",
+          "text_color": [
+            45,
+            90,
+            116,
+            255
+          ],
+          "font_size": 16.0,
+          "font": "Sans",
+          "text_align": "Center",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "ui_script": [
+            "project.open"
+          ],
+          "id": 7,
+          "parent": 2,
+          "kind": "Button",
+          "name": "Open project",
+          "x": 24.0,
+          "y": 242.0,
+          "width": 190.0,
+          "height": 44.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            248,
+            252,
+            254,
+            255
+          ],
+          "stroke": [
+            110,
+            179,
+            211,
+            255
+          ],
+          "stroke_width": 1.5,
+          "radius": 12.0,
+          "opacity": 1.0,
+          "text": "Open project",
+          "text_color": [
+            45,
+            90,
+            116,
+            255
+          ],
+          "font_size": 16.0,
+          "font": "Sans",
+          "text_align": "Center",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "ui_script": [
+            "history"
+          ],
+          "id": 8,
+          "parent": 2,
+          "kind": "Button",
+          "name": "History",
+          "x": 24.0,
+          "y": 300.0,
+          "width": 190.0,
+          "height": 44.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            248,
+            252,
+            254,
+            255
+          ],
+          "stroke": [
+            110,
+            179,
+            211,
+            255
+          ],
+          "stroke_width": 1.5,
+          "radius": 12.0,
+          "opacity": 1.0,
+          "text": "History",
+          "text_color": [
+            45,
+            90,
+            116,
+            255
+          ],
+          "font_size": 16.0,
+          "font": "Sans",
+          "text_align": "Center",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "ui_script": [
+            "chats"
+          ],
+          "id": 9,
+          "parent": 2,
+          "kind": "Button",
+          "name": "My chats",
+          "x": 24.0,
+          "y": 358.0,
+          "width": 190.0,
+          "height": 44.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            248,
+            252,
+            254,
+            255
+          ],
+          "stroke": [
+            110,
+            179,
+            211,
+            255
+          ],
+          "stroke_width": 1.5,
+          "radius": 12.0,
+          "opacity": 1.0,
+          "text": "My chats",
+          "text_color": [
+            45,
+            90,
+            116,
+            255
+          ],
+          "font_size": 16.0,
+          "font": "Sans",
+          "text_align": "Center",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "ui_script": [
+            "ollama.agent"
+          ],
+          "id": 10,
+          "parent": 2,
+          "kind": "Button",
+          "name": "Ollama agent",
+          "x": 24.0,
+          "y": 726.0,
+          "width": 190.0,
+          "height": 44.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            248,
+            252,
+            254,
+            255
+          ],
+          "stroke": [
+            110,
+            179,
+            211,
+            255
+          ],
+          "stroke_width": 1.5,
+          "radius": 12.0,
+          "opacity": 1.0,
+          "text": "Ollama agent",
+          "text_color": [
+            45,
+            90,
+            116,
+            255
+          ],
+          "font_size": 16.0,
+          "font": "Sans",
+          "text_align": "Center",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "ui_script": [
+            "settings"
+          ],
+          "id": 11,
+          "parent": 2,
+          "kind": "Button",
+          "name": "Settings",
+          "x": 24.0,
+          "y": 784.0,
+          "width": 190.0,
+          "height": 44.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            248,
+            252,
+            254,
+            255
+          ],
+          "stroke": [
+            110,
+            179,
+            211,
+            255
+          ],
+          "stroke_width": 1.5,
+          "radius": 12.0,
+          "opacity": 1.0,
+          "text": "Settings",
+          "text_color": [
+            45,
+            90,
+            116,
+            255
+          ],
+          "font_size": 16.0,
+          "font": "Sans",
+          "text_align": "Center",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "id": 12,
+          "parent": 1,
+          "kind": "Text",
+          "name": "Current conversation",
+          "x": 268.0,
+          "y": 30.0,
+          "width": 650.0,
+          "height": 36.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "stroke": [
+            160,
+            168,
+            184,
+            255
+          ],
+          "stroke_width": 0.0,
+          "radius": 0.0,
+          "opacity": 1.0,
+          "text": "Current conversation",
+          "text_color": [
+            50,
+            65,
+            77,
+            255
+          ],
+          "font_size": 26.0,
+          "font": "Sans",
+          "text_align": "Left",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "id": 13,
+          "parent": 1,
+          "kind": "Text",
+          "name": "Wii workspace",
+          "x": 270.0,
+          "y": 74.0,
+          "width": 650.0,
+          "height": 22.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "stroke": [
+            160,
+            168,
+            184,
+            255
+          ],
+          "stroke_width": 0.0,
+          "radius": 0.0,
+          "opacity": 1.0,
+          "text": "Wii workspace",
+          "text_color": [
+            97,
+            125,
+            141,
+            255
+          ],
+          "font_size": 14.0,
+          "font": "Sans",
+          "text_align": "Left",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "ui_script": [
+            "conversation"
+          ],
+          "id": 14,
+          "parent": 1,
+          "kind": "Frame",
+          "name": "Conversation area",
+          "x": 268.0,
+          "y": 122.0,
+          "width": 804.0,
+          "height": 562.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "stroke": [
+            202,
+            219,
+            229,
+            255
+          ],
+          "stroke_width": 1.0,
+          "radius": 16.0,
+          "opacity": 1.0,
+          "text": "What should we build?",
+          "text_color": [
+            50,
+            65,
+            77,
+            255
+          ],
+          "font_size": 18.0,
+          "font": "Sans",
+          "text_align": "Left",
+          "clip_content": true,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 24.0
+        },
+        {
+          "ui_script": [
+            "composer"
+          ],
+          "id": 15,
+          "parent": 1,
+          "kind": "Input",
+          "name": "Message",
+          "x": 268.0,
+          "y": 714.0,
+          "width": 804.0,
+          "height": 68.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "stroke": [
+            170,
+            202,
+            219,
+            255
+          ],
+          "stroke_width": 1.5,
+          "radius": 14.0,
+          "opacity": 1.0,
+          "text": "Ask anything",
+          "text_color": [
+            32,
+            37,
+            49,
+            255
+          ],
+          "font_size": 18.0,
+          "font": "Sans",
+          "text_align": "Left",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "ui_script": [
+            "files.add"
+          ],
+          "id": 16,
+          "parent": 1,
+          "kind": "Button",
+          "name": "Add files",
+          "x": 268.0,
+          "y": 808.0,
+          "width": 116.0,
+          "height": 44.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            248,
+            252,
+            254,
+            255
+          ],
+          "stroke": [
+            110,
+            179,
+            211,
+            255
+          ],
+          "stroke_width": 1.5,
+          "radius": 12.0,
+          "opacity": 1.0,
+          "text": "Add files",
+          "text_color": [
+            45,
+            90,
+            116,
+            255
+          ],
+          "font_size": 16.0,
+          "font": "Sans",
+          "text_align": "Center",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "ui_script": [
+            "model.effort"
+          ],
+          "id": 17,
+          "parent": 1,
+          "kind": "Button",
+          "name": "Model / effort",
+          "x": 398.0,
+          "y": 808.0,
+          "width": 260.0,
+          "height": 44.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            248,
+            252,
+            254,
+            255
+          ],
+          "stroke": [
+            110,
+            179,
+            211,
+            255
+          ],
+          "stroke_width": 1.5,
+          "radius": 12.0,
+          "opacity": 1.0,
+          "text": "Model / effort",
+          "text_color": [
+            45,
+            90,
+            116,
+            255
+          ],
+          "font_size": 16.0,
+          "font": "Sans",
+          "text_align": "Center",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "ui_script": [
+            "chat.stop"
+          ],
+          "id": 18,
+          "parent": 1,
+          "kind": "Button",
+          "name": "Stop",
+          "x": 796.0,
+          "y": 808.0,
+          "width": 132.0,
+          "height": 44.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            248,
+            252,
+            254,
+            255
+          ],
+          "stroke": [
+            110,
+            179,
+            211,
+            255
+          ],
+          "stroke_width": 1.5,
+          "radius": 12.0,
+          "opacity": 1.0,
+          "text": "Stop",
+          "text_color": [
+            45,
+            90,
+            116,
+            255
+          ],
+          "font_size": 16.0,
+          "font": "Sans",
+          "text_align": "Center",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        },
+        {
+          "ui_script": [
+            "chat.send"
+          ],
+          "id": 19,
+          "parent": 1,
+          "kind": "Button",
+          "name": "Send",
+          "x": 940.0,
+          "y": 808.0,
+          "width": 132.0,
+          "height": 44.0,
+          "visible": true,
+          "locked": false,
+          "fill": [
+            74,
+            166,
+            214,
+            255
+          ],
+          "stroke": [
+            110,
+            179,
+            211,
+            255
+          ],
+          "stroke_width": 1.5,
+          "radius": 12.0,
+          "opacity": 1.0,
+          "text": "Send",
+          "text_color": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "font_size": 16.0,
+          "font": "Sans",
+          "text_align": "Center",
+          "clip_content": false,
+          "flow": "Free",
+          "gap": 16.0,
+          "padding": 16.0
+        }
+      ]
+    }
+  ]
+}

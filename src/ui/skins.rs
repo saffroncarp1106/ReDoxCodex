@@ -157,6 +157,7 @@ impl ReDox {
     }
 
     pub(in crate::app) fn skin_settings(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
+        self.studio_skin_settings(ui);
         ui.horizontal_wrapped(|ui| {
             if ui.button("Create skin…").clicked() {
                 self.begin_skin(context);

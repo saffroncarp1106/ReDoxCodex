@@ -22,10 +22,10 @@ impl ReDox {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     if icons::button(ui, Icon::Back, "Previous chat").clicked() {
-                        self.navigate(-1);
+                        self.dispatch_ui_action(redox_studio::actions::UiAction::Previous, context);
                     }
                     if icons::button(ui, Icon::Forward, "Next chat").clicked() {
-                        self.navigate(1);
+                        self.dispatch_ui_action(redox_studio::actions::UiAction::Next, context);
                     }
                     if icons::button(ui, Icon::Panel, "Toggle sidebar").clicked() {
                         self.sidebar_visible = !self.sidebar_visible;
@@ -56,7 +56,7 @@ impl ReDox {
     }
 
     pub(super) fn main_menus(&mut self, ui: &mut egui::Ui, context: &egui::Context) {
-        ui.allocate_ui_with_layout(
+        let response = ui.allocate_ui_with_layout(
             vec2(
                 184.0,
                 if !super::theme::is_classic(ui) {
@@ -85,15 +85,24 @@ impl ReDox {
                             )
                             .clicked()
                         {
-                            self.new_chat();
+                            self.dispatch_ui_action(
+                                redox_studio::actions::UiAction::NewChat,
+                                context,
+                            );
                             ui.close();
                         }
                         if ui.button("Open project").clicked() {
-                            self.pick_workspace(context);
+                            self.dispatch_ui_action(
+                                redox_studio::actions::UiAction::OpenProject,
+                                context,
+                            );
                             ui.close();
                         }
                         if ui.button("Add files").clicked() {
-                            self.pick_files(context);
+                            self.dispatch_ui_action(
+                                redox_studio::actions::UiAction::AddFiles,
+                                context,
+                            );
                             ui.close();
                         }
                         if ui.button("Settings").clicked() {
@@ -142,6 +151,14 @@ impl ReDox {
                 });
             },
         );
+        #[cfg(feature = "design-export")]
+        super::design_export::record(
+            ui.ctx(),
+            response.response.rect,
+            redox_studio::actions::UiAction::Menus,
+        );
+        #[cfg(not(feature = "design-export"))]
+        let _ = response;
     }
 
     pub(super) fn title_ui_picker(&mut self, ui: &mut egui::Ui) {
@@ -152,7 +169,7 @@ impl ReDox {
         });
     }
 
-    pub(super) fn navigate(&mut self, direction: isize) {
+    pub(in crate::app) fn navigate(&mut self, direction: isize) {
         let chats: Vec<_> = self
             .session
             .chats
@@ -194,14 +211,14 @@ impl ReDox {
                     .inner
                     .clicked()
                 {
-                    self.new_chat();
+                    self.dispatch_ui_action(redox_studio::actions::UiAction::NewChat, context);
                 }
                 if rail_button(ui, Icon::Clock, self.show_archived, "Archived chats").clicked() {
                     self.show_archived = true;
                     self.sidebar_visible = true;
                 }
                 if rail_button(ui, Icon::Books, false, "Open project").clicked() {
-                    self.pick_workspace(context);
+                    self.dispatch_ui_action(redox_studio::actions::UiAction::OpenProject, context);
                 }
                 if ui
                     .add_enabled_ui(self.can_new_chat(), |ui| {
@@ -210,7 +227,7 @@ impl ReDox {
                     .inner
                     .clicked()
                 {
-                    self.new_chat();
+                    self.dispatch_ui_action(redox_studio::actions::UiAction::NewChat, context);
                     if let Some(chat) = self.session.active_mut() {
                         chat.mode = Mode::Code;
                     }
@@ -324,7 +341,7 @@ impl ReDox {
                     })
                     .inner;
                 if new_chat.clicked() {
-                    self.new_chat();
+                    self.dispatch_ui_action(redox_studio::actions::UiAction::NewChat, context);
                 }
 
                 if self.search_open {
@@ -493,7 +510,7 @@ impl ReDox {
         }
 
         if sidebar_row(ui, "New project", false, 8.0, Some(Icon::Folder)).clicked() {
-            self.pick_workspace(context);
+            self.dispatch_ui_action(redox_studio::actions::UiAction::OpenProject, context);
         }
         ui.add_space(25.0);
         section_label(ui, "Recents");

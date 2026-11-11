@@ -476,10 +476,13 @@ impl ReDox {
                         .inner
                         .clicked()
                     {
-                        self.new_chat();
+                        self.dispatch_ui_action(redox_studio::actions::UiAction::NewChat, context);
                     }
                     if button(ui, "Open project", 126.0, false).clicked() {
-                        self.pick_workspace(context);
+                        self.dispatch_ui_action(
+                            redox_studio::actions::UiAction::OpenProject,
+                            context,
+                        );
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if button(ui, "Settings", 100.0, self.settings_open).clicked() {

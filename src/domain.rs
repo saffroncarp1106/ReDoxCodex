@@ -247,6 +247,7 @@ impl Chat {
 #[derive(Deserialize, Serialize)]
 #[serde(default)]
 pub struct Session {
+    pub resources: crate::resources::Settings,
     pub desktop: crate::desktop::Settings,
     pub archived_projects: Vec<PathBuf>,
     pub local_archive_overrides: BTreeMap<String, bool>,
@@ -265,6 +266,7 @@ pub struct Session {
 impl Default for Session {
     fn default() -> Self {
         Self {
+            resources: crate::resources::Settings::default(),
             desktop: crate::desktop::Settings::default(),
             archived_projects: Vec::new(),
             local_archive_overrides: BTreeMap::new(),

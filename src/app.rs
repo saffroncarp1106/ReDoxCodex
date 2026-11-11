@@ -17,6 +17,8 @@ use redox::usage::UsageInfo;
 
 #[path = "ui/mod.rs"]
 mod ui;
+#[path = "ui_actions.rs"]
+mod ui_actions;
 
 use ui::theme;
 
@@ -46,6 +48,8 @@ enum Event {
 }
 
 pub struct ReDox {
+    resource_limiter: redox::resources::Limiter,
+    resource_draft: redox::resources::Settings,
     presence: redox::discord_presence::Presence,
     updates: redox::updates::Updates,
     project_windows: Vec<ui::project_window::ProjectWindow>,
@@ -201,6 +205,8 @@ impl ReDox {
             .unwrap_or_default();
 
         session.recover();
+        session.resources.normalize();
+        let resource_limiter = redox::resources::Limiter::new(&session.resources);
         if design.is_none() {
             session.codex_path = codex::resolve_executable(&session.codex_path);
         }
@@ -224,6 +230,8 @@ impl ReDox {
         let (run_sender, run_receiver) = tokio::sync::mpsc::channel(128);
 
         let mut app = Self {
+            resource_limiter,
+            resource_draft: session.resources.clone(),
             presence: redox::discord_presence::Presence::new(),
             updates: redox::updates::Updates::default(),
             focus_prompt: true,
@@ -320,8 +328,83 @@ impl ReDox {
         )
     }
     #[cfg(feature = "design-export")]
+    pub fn prepare_design_scene(&mut self, scene: redox_studio::scenes::SceneId) {
+        use redox_studio::scenes::SceneId;
+        self.ui_preferences.floating_windows = false;
+        self.ui_preferences.studio_skin = None;
+        self.ui_preferences.win98_unlocked = true;
+        self.ui_preferences.agents_open = scene == SceneId::Agents;
+        self.sidebar_visible = scene == SceneId::History || self.active_ui.config.layout != "win98";
+        self.settings_open = !matches!(
+            scene,
+            SceneId::Welcome | SceneId::Conversation | SceneId::Agents | SceneId::History
+        );
+        self.settings_page = match scene {
+            SceneId::Models => ui::SettingsPage::Models,
+            SceneId::Workspace => ui::SettingsPage::Workspace,
+            SceneId::Appearance => ui::SettingsPage::Appearance,
+            SceneId::Cursors => ui::SettingsPage::Cursors,
+            SceneId::Advanced => ui::SettingsPage::Advanced,
+            SceneId::Updates => ui::SettingsPage::Updates,
+            SceneId::About => ui::SettingsPage::About,
+            _ => ui::SettingsPage::Account,
+        };
+        self.account = "Studio preview account".into();
+        self.signed_in = true;
+        self.models = vec!["studio-demo".into()];
+        self.model_details = vec![serde_json::from_value(serde_json::json!({
+            "model":"studio-demo", "display_name":"Studio demo model", "default_reasoning_effort":"medium",
+            "supported_reasoning_efforts":[{"reasoning_effort":"low","description":"Quick dummy response"},
+                {"reasoning_effort":"medium","description":"Balanced dummy response"},
+                {"reasoning_effort":"high","description":"Detailed dummy response"}]
+        })).expect("Demo model")];
+        self.session.model = "studio-demo".into();
+        if let Some(chat) = self.session.active_mut() {
+            chat.messages.clear();
+            chat.draft.clear();
+            if scene == SceneId::Conversation {
+                chat.title = "Studio playground".into();
+                for (role, text) in [
+                    (
+                        redox::domain::Role::User,
+                        "Dummy text. Can we try this layout?",
+                    ),
+                    (
+                        redox::domain::Role::Assistant,
+                        "Yatta yatta. Larp larp. This is a local preview response.\n\nYou can edit the skin while experimenting with this conversation.",
+                    ),
+                ] {
+                    chat.messages.push(redox::domain::Message {
+                        id: uuid::Uuid::new_v4(),
+                        role,
+                        content: text.into(),
+                        status: redox::domain::MessageStatus::Complete,
+                        error: None,
+                        model: "studio-demo".into(),
+                        attachments: vec![],
+                        activity: Default::default(),
+                    });
+                }
+            }
+        }
+    }
+    #[cfg(feature = "design-export")]
     pub fn render_design(&mut self, context: &egui::Context) {
+        context.data_mut(|d| {
+            d.remove::<Vec<(egui::Rect, redox_studio::actions::UiAction)>>(egui::Id::new(
+                "export_controls",
+            ))
+        });
         self.draw_ui(context);
+        if let Some(id) = self.prompt_input_id
+            && let Some(response) = context.read_response(id)
+        {
+            ui::design_export::record(
+                context,
+                response.rect,
+                redox_studio::actions::UiAction::Composer,
+            );
+        }
     }
 
     fn scan_ui(&mut self) {
@@ -1351,7 +1434,13 @@ impl eframe::App for ReDox {
                 .filter_map(|file| file.path.clone())
                 .collect::<Vec<_>>()
         });
-        if !dropped.is_empty() && !self.skin_picture_drop(&dropped, context) {
+        if dropped.len() == 1
+            && dropped[0]
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("redoxskin"))
+        {
+            self.load_studio_skin(dropped[0].clone());
+        } else if !dropped.is_empty() && !self.skin_picture_drop(&dropped, context) {
             self.import_ui(Some(dropped), context);
         }
         if self.ui_scanned.elapsed() > Duration::from_secs(3) {

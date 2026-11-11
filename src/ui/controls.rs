@@ -41,6 +41,12 @@ impl ReDox {
                     ui.style_mut().visuals.menu_corner_radius =
                         egui::CornerRadius::same(if classic { 0 } else { 18 });
                     let button = effort_button(ui, &name, &label);
+                    #[cfg(feature = "design-export")]
+                    super::design_export::record(
+                        ui.ctx(),
+                        button.rect,
+                        redox_studio::actions::UiAction::ModelEffort,
+                    );
                     if self.capture_path.is_some()
                         && std::env::args().any(|arg| arg == "--effort-preview")
                     {
@@ -312,6 +318,12 @@ fn model_choices(
             )
             .frame(false)
             .truncate(),
+        );
+        #[cfg(feature = "design-export")]
+        super::design_export::record(
+            ui.ctx(),
+            response.rect,
+            redox_studio::actions::UiAction::Model,
         );
         if response.clicked() {
             expanded = !expanded;

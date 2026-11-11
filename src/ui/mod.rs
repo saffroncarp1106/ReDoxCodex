@@ -25,11 +25,13 @@ pub(super) mod project_window;
 mod queue;
 mod renderers;
 mod response_text;
+mod resources;
 mod scroll;
 mod settings;
 mod shell;
 pub(super) mod skins;
 pub(super) mod startup;
+mod studio;
 pub(super) mod theme;
 mod updates;
 mod usage;
@@ -52,6 +54,7 @@ pub(super) fn request_animation_frame(context: &egui::Context) {
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub(super) struct Preferences {
+    pub studio_skin: Option<std::path::PathBuf>,
     pub hide_update_prompts: bool,
     pub discord_presence: redox::discord_presence::Settings,
     pub codex_mode: bool,
@@ -72,6 +75,7 @@ pub(super) struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
+            studio_skin: None,
             hide_update_prompts: false,
             discord_presence: redox::discord_presence::Settings::default(),
             codex_mode: false,
@@ -112,6 +116,7 @@ pub(super) enum SettingsPage {
     Account,
     Models,
     Workspace,
+    Resources,
     Appearance,
     Cursors,
     Advanced,
@@ -161,6 +166,7 @@ impl ReDox {
 
         (renderer.conversation)(self, context);
 
+        self.studio_controls(context);
         self.rename_dialog(context);
         self.settings(context);
         self.approval_dialog(context);
